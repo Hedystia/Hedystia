@@ -77,19 +77,47 @@ bun add @hedystia/db
 ```
 
 ```typescript
-import { database, table } from "@hedystia/db";
+import { table, integer, varchar, text } from "@hedystia/db";
 
-const users = table("users", {
-  id: (col) => col.int().primaryKey().autoIncrement(),
-  name: (col) => col.string(),
-  email: (col) => col.string().unique(),
+// Define your schema
+const users = table("example_users", {
+  id: integer().primaryKey().autoIncrement(),
+  fullName: varchar(255).name("full_name").notNull(),
+  email: varchar(255).unique(),
 });
 
-const db = database({ driver: "mysql2", connection: { /* ... */ } });
-const repo = db.repository(users);
+const posts = table("example_posts", {
+  id: integer().primaryKey().autoIncrement(),
+  authorId: integer().name("author_id").references(() => users.id),
+  title: varchar(255).notNull(),
+  body: text(),
+});
+```
 
-await repo.insert({ name: "Alice", email: "alice@example.com" });
-const user = await repo.findOne({ where: { email: "alice@example.com" } });
+```typescript
+import { database } from "@hedystia/db";
+import { users, posts } from "./schema";
+
+// Initialize with object schema (recommended)
+const db = database({
+  schemas: { users, posts },
+  database: "sqlite",
+  connection: { filename: "./main.db" },
+  syncSchemas: true, // Auto-create tables in development
+});
+
+await db.initialize();
+
+// Query data
+const newUser = await db.users.insert({ 
+  fullName: "Alice Vance", 
+  email: "alice@hedystia.com" 
+});
+
+const userWithPosts = await db.users.findFirst({
+  where: { fullName: "Alice Vance" },
+  with: { posts: true }
+});
 ```
 
 ### Reactive UI (View)
@@ -98,20 +126,33 @@ const user = await repo.findOne({ where: { email: "alice@example.com" } });
 bun add @hedystia/view
 ```
 
-```typescript
-import { sig, mount, Show, For } from "@hedystia/view";
+Configure your `tsconfig.json`:
+```json
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@hedystia/view"
+  }
+}
+```
+
+```tsx
+import { sig, val, set, mount } from "@hedystia/view";
 
 function Counter() {
   const count = sig(0);
   return (
-    <button onClick={() => count.set(count.get() + 1)}>
-      Count: {count}
-    </button>
+    <div>
+      <h1>Counter: {() => val(count)}</h1>
+      <button onClick={() => set(count, val(count) + 1)}>+</button>
+    </div>
   );
 }
 
-mount(Counter, document.getElementById("app")!);
+mount(Counter, document.getElementById("root")!);
 ```
+
+> Components run **once**. Reactivity comes from wrapping signal reads in `() => ...` accessors.
 
 ### Validations
 
@@ -120,13 +161,25 @@ bun add @hedystia/validations
 ```
 
 ```typescript
-import { h } from "@hedystia/validations";
+import { h, Infer } from "@hedystia/validations";
 
 const userSchema = h.object({
-  email: h.email(),
-  age: h.number(),
+  id: h.number(),
   name: h.string(),
+  email: h.string().email(),
+  tags: h.string().array().optional()
 });
+
+// Type inference
+type User = Infer<typeof userSchema>;
+/*
+{
+  id: number;
+  name: string;
+  email: string;
+  tags?: string[] | undefined;
+}
+*/
 
 // Standard Schema v1 compliant — works with Zod, ArkType, etc.
 ```
@@ -136,13 +189,16 @@ const userSchema = h.object({
 ```typescript
 import { swagger } from "@hedystia/swagger";
 
-const docs = swagger({
+const swaggerPlugin = swagger({
   title: "My API",
-  description: "API documentation",
+  description: "An example API with Swagger",
   version: "1.0.0",
+  tags: [
+    { name: "users", description: "User operations" },
+  ],
 });
 
-app.use("/swagger", docs.plugin(app));
+app.use("/swagger", swaggerPlugin.plugin(app));
 ```
 
 ### Multi-runtime Adapters
