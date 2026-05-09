@@ -20,6 +20,7 @@
     "@hedystia/types": "workspace:*",
     "@hedystia/validations": "workspace:*",
     "@hedystia/view": "workspace:*",
+    "@hedystia/ws": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@zod/mini": "4.0.0-beta.20250418T202744",
     "better-auth": "^1.2.7",
