@@ -17,7 +17,7 @@ export type Runtime = "bun" | "node" | "deno" | "browser" | "unknown";
  *
  * @example
  * ```ts
- * import { detectRuntime } from "@hedystia/websocket";
+ * import { detectRuntime } from "@hedystia/ws";
  *
  * if (detectRuntime() === "bun") {
  *   // ...use Bun-specific APIs

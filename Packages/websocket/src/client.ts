@@ -20,7 +20,7 @@ export type { ClientWebSocketOptions } from "./types";
  *
  * @example
  * ```ts
- * import { resolveWebSocket } from "@hedystia/websocket/client";
+ * import { resolveWebSocket } from "@hedystia/ws/client";
  *
  * const WS = resolveWebSocket();
  * const socket = new WS("ws://localhost:3000");
@@ -49,7 +49,7 @@ export function resolveWebSocket(): typeof WebSocket {
  *
  * @example
  * ```ts
- * import { createWebSocket } from "@hedystia/websocket/client";
+ * import { createWebSocket } from "@hedystia/ws/client";
  *
  * const ws = createWebSocket("ws://localhost:3000", {
  *   protocols: "v1",
@@ -87,7 +87,7 @@ export function createWebSocket(url: string, options?: ClientWebSocketOptions): 
  *
  * @example
  * ```ts
- * import { WebSocketClient } from "@hedystia/websocket/client";
+ * import { WebSocketClient } from "@hedystia/ws/client";
  *
  * const client = new WebSocketClient("ws://localhost:3000");
  * client.onopen = () => client.send("hello");

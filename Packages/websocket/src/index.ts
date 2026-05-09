@@ -1,5 +1,5 @@
 /**
- * `@hedystia/websocket` — universal WebSocket primitives for Bun, Node.js
+ * `@hedystia/ws` — universal WebSocket primitives for Bun, Node.js
  * and Deno.
  *
  * @remarks

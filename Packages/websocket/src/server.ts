@@ -44,7 +44,7 @@ export type {
  * @example
  * ```ts
  * import { createServer } from "node:http";
- * import { WebSocketServer } from "@hedystia/websocket/server";
+ * import { WebSocketServer } from "@hedystia/ws/server";
  *
  * const wss = new WebSocketServer({
  *   open: (ws) => ws.send("welcome"),

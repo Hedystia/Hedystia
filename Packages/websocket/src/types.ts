@@ -4,7 +4,7 @@
  * @remarks
  * The {@link ServerWebSocket} interface mirrors Bun's API so that handlers
  * written against Bun's native WebSocket continue to work unchanged when
- * `@hedystia/websocket`'s portable {@link ServerWebSocket | server} is used
+ * `@hedystia/ws`'s portable {@link ServerWebSocket | server} is used
  * instead.
  *
  * @packageDocumentation
@@ -117,7 +117,7 @@ export interface ServerWebSocket<Data extends WSData = WSData> {
  * Bun-style compression dictionary identifier.
  *
  * @remarks
- * Used by Bun's `perMessageDeflate` configuration. The `@hedystia/websocket`
+ * Used by Bun's `perMessageDeflate` configuration. The `@hedystia/ws`
  * server forwards the value to the underlying implementation, which only
  * Bun interprets natively; Node falls back to defaults when the value is
  * not a recognised `ws` shape.
