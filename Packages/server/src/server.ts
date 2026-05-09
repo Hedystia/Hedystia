@@ -4,6 +4,7 @@ import Core from "./core";
 import generateCorsHeaders from "./handlers/cors";
 import processGenericHandlers from "./handlers/generic";
 import { Router } from "./router";
+import { serve as serveUnified, type UnifiedServer } from "./runtime";
 import type {
   CookieOptions,
   CorsOptions,
@@ -758,30 +759,26 @@ export class Hedystia<
 
   /**
    * Start HTTP server
+   *
+   * Works on both Bun and Node.js without any additional adapter. WebSocket
+   * upgrades are handled by `@hedystia/ws` which transparently uses
+   * `Bun.serve` on Bun and `node:http` + `ws` on Node.
+   *
    * @param {number} port - Server port number
    * @param {function} [callback] - Optional callback invoked once the server is listening
    * @returns {this} Current instance
-   * @throws {Error} If not running in Bun runtime
    */
   listen(port: number, callback?: (server: NonNullable<typeof this.server>) => void): this {
-    const serve = globalThis.Bun?.serve;
-
-    if (!serve) {
-      throw new Error(
-        "Listen only works in Bun runtime, please use @hedystia/adapter to work with other environments",
-      );
-    }
-
     this.compile();
 
     if (this.sseMode) {
       this.registerSSERoutes();
-      this.server = serve({
+      this.server = serveUnified({
         port,
         reusePort: this.reusePort,
         idleTimeout: this.idleTimeout,
         fetch: (req) => this.fetch(req),
-      });
+      }) as unknown as UnifiedServer;
       if (callback) {
         callback(this.server!);
       }
@@ -791,7 +788,7 @@ export class Hedystia<
     const hasWebSocket = this.wsRoutes.size > 0 || this.subscriptionHandlers.size > 0;
 
     if (hasWebSocket) {
-      this.server = serve<WebSocketData>({
+      this.server = serveUnified<WebSocketData>({
         port,
         reusePort: this.reusePort,
         idleTimeout: this.idleTimeout,
@@ -819,17 +816,16 @@ export class Hedystia<
           }
           return this.fetch(req);
         },
-
         websocket: this.createWebSocketHandlers(),
-      });
+      }) as unknown as UnifiedServer;
       this.startHeartbeat();
     } else {
-      this.server = serve({
+      this.server = serveUnified({
         port,
         reusePort: this.reusePort,
         idleTimeout: this.idleTimeout,
         fetch: (req) => this.fetch(req),
-      });
+      }) as unknown as UnifiedServer;
     }
 
     if (callback) {

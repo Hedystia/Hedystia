@@ -1,3 +1,4 @@
+import { createWebSocket } from "@hedystia/ws/client";
 import type { Subscription, SubscriptionCallback, SubscriptionOptions } from "../types";
 import { calculateReconnectDelay, createLogger, generateUUID, replaceTimeout } from "../utils";
 
@@ -136,7 +137,7 @@ export class SubscriptionManager {
 
     let connection = this.connections.get(path);
     if (!connection) {
-      const socket = new WebSocket(wsUrl);
+      const socket = createWebSocket(wsUrl, this.headers ? { headers: this.headers } : undefined);
       connection = { socket, handlers: [], reconnectAttempts: 0, clientSubscriptionId };
       this.connections.set(path, connection);
 

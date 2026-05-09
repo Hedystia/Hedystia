@@ -8,6 +8,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@hedystia/ws": "workspace:*",
     "hedystia": "workspace:*"
   },
   "private": false,

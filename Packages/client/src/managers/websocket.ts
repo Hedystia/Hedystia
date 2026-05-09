@@ -1,3 +1,4 @@
+import { createWebSocket } from "@hedystia/ws/client";
 import { calculateReconnectDelay, createLogger } from "../utils";
 
 type DebugLevel = "none" | "debug" | "warn" | "log" | "error";
@@ -81,8 +82,7 @@ export class WebSocketManager {
       }
 
       this.log("debug", "WebSocket connecting", { path, attempt: reconnectAttempts });
-      const options = this.headers ? { headers: this.headers } : undefined;
-      socket = new WebSocket(wsUrl, options);
+      socket = createWebSocket(wsUrl, this.headers ? { headers: this.headers } : undefined);
 
       socket.onopen = () => {
         reconnectAttempts = 0;
