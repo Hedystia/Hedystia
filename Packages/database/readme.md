@@ -5,7 +5,7 @@ Next-gen TypeScript ORM for building type-safe database layers at lightspeed. Fo
 ## Features
 
 - 💎 **Type-safe by Design**: First-class TypeScript inference for all your queries.
-- 🚀 **Multi-Driver Support**: Native drivers for SQLite, MySQL, and experimental support for File/S3 storage.
+- 🚀 **Multi-Driver Support**: Native drivers for SQLite, MySQL, PostgreSQL, and experimental support for File/S3 storage.
 - ⚡ **Auto-Mapping**: Decouple database table/column names from your TypeScript models.
 - 🔗 **Smart Relations**: Define relationships once and load them eagerly with intuitive `with` queries.
 - 📦 **Zero-Config Migrations**: CLI for generating atomic migrations and schema synchronization.
@@ -23,6 +23,7 @@ bun add @hedystia/db
 | --- | --- | --- |
 | **SQLite** | `better-sqlite3`, `sqlite3`, `sql.js` | `bun add better-sqlite3` |
 | **MySQL** | `mysql2` or `mysql` | `bun add mysql2` |
+| **PostgreSQL** | `pg` | `bun add pg` |
 | **S3** | `@aws-sdk/client-s3` | `bun add @aws-sdk/client-s3` |
 | **File** | *Built-in* | *No installation needed* |
 | **Edge** | `bun:sqlite` (Bun only) | *No installation needed* |
@@ -102,7 +103,7 @@ Explore our detailed documentation for advanced topics:
 - [**Relations**](https://docs.hedystia.com/db/relations) - One-to-many, many-to-one, and cascade behaviors.
 - [**Queries**](https://docs.hedystia.com/db/queries) - Full API reference for find, insert, update, and delete.
 - [**CLI & Migrations**](https://docs.hedystia.com/db/cli) - Managing schema changes safely.
-- [**Drivers**](https://docs.hedystia.com/db/drivers/sqlite) - Specific configuration for MySQL, SQLite, S3, and more.
+- [**Drivers**](https://docs.hedystia.com/db/drivers/sqlite) - Specific configuration for MySQL, PostgreSQL, SQLite, S3, and more.
 
 ## Community & Links
 

@@ -2,12 +2,14 @@ import { DriverError } from "../errors";
 import type { ConnectionConfig, DatabaseDriver, DatabaseType } from "../types";
 import { FileDriver } from "./file";
 import { MySQLDriver } from "./mysql";
+import { PostgreSQLDriver } from "./postgres";
 import { S3Driver } from "./s3";
 import { SQLiteDriver } from "./sqlite";
 
 export { BaseDriver } from "./driver";
 export { FileDriver } from "./file";
 export { MySQLDriver } from "./mysql";
+export { PostgreSQLDriver } from "./postgres";
 export { S3Driver } from "./s3";
 export * from "./sql-compiler";
 export { SQLiteDriver } from "./sqlite";
@@ -28,6 +30,8 @@ export function createDriver(type: DatabaseType, config: ConnectionConfig): Data
     case "mysql":
     case "mariadb":
       return new MySQLDriver(config as any, provider as any);
+    case "postgres":
+      return new PostgreSQLDriver(config as any, provider as any);
     case "file":
       return new FileDriver(config as any);
     case "s3":

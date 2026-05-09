@@ -37,6 +37,12 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
   private jsonCodeKeys: Set<string>;
   private dateColumns: Set<string>;
 
+  private get dialect(): string {
+    return typeof this.driver.dialect === "string"
+      ? this.driver.dialect
+      : (this.driver.dialect as { name: string }).name;
+  }
+
   constructor(
     tableName: string,
     driver: DatabaseDriver,
@@ -160,7 +166,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
     const cleaned = this.toDbKeys(this.cleanData(single));
 
     const params: unknown[] = [];
-    const sql = compileInsert(this.tableName, cleaned, params);
+    const sql = compileInsert(this.tableName, cleaned, params, this.dialect);
     const result = await this.driver.execute(sql, params);
 
     const pk = this.registry.getPrimaryKey(this.tableName);
@@ -187,7 +193,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
 
     const cleanedData = data.map((item) => this.toDbKeys(this.cleanData(item)));
     const params: unknown[] = [];
-    const sql = compileBulkInsert(this.tableName, cleanedData, params);
+    const sql = compileBulkInsert(this.tableName, cleanedData, params, this.dialect);
     const result = await this.driver.execute(sql, params);
 
     const pk = this.registry.getPrimaryKey(this.tableName);
@@ -220,7 +226,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
     const dbWhere = this.mapWhereToDb(options.where as WhereClause);
 
     const params: unknown[] = [];
-    const sql = compileUpdate(this.tableName, cleaned, dbWhere, params);
+    const sql = compileUpdate(this.tableName, cleaned, dbWhere, params, this.dialect);
     await this.driver.execute(sql, params);
 
     return this.find({ where: options.where } as QueryOptions<T>);
@@ -240,7 +246,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
     const dbWhere = this.mapWhereToDb(options.where as WhereClause);
 
     const params: unknown[] = [];
-    const sql = compileDelete(this.tableName, dbWhere, params);
+    const sql = compileDelete(this.tableName, dbWhere, params, this.dialect);
     const result = await this.driver.execute(sql, params);
     return result.affectedRows;
   }
@@ -308,7 +314,8 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
    */
   async truncate(): Promise<void> {
     this.cache.invalidateTable(this.tableName);
-    await this.driver.execute(`DELETE FROM \`${this.tableName}\``);
+    const quote = (s: string) => (this.dialect === "postgres" ? `"${s}"` : `\`${s}\``);
+    await this.driver.execute(`DELETE FROM ${quote(this.tableName)}`);
   }
 
   private async findSQL(options?: QueryOptions<T>): Promise<T[]> {
@@ -323,6 +330,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
         skip: options?.skip,
       },
       params,
+      this.dialect,
     );
     return this.driver.query(sql, params);
   }

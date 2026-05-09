@@ -21,11 +21,13 @@ export type ColumnDataType =
 export type DatabaseType =
   | "mysql"
   | "mariadb"
+  | "postgres"
   | "sqlite"
   | "file"
   | "s3"
   | { name: "mysql"; provider: "mysql" | "mysql2" }
   | { name: "mariadb"; provider: "mysql" | "mysql2" }
+  | { name: "postgres"; provider: "pg" }
   | { name: "sqlite"; provider: "better-sqlite3" | "sqlite3" | "sql.js" | "bun:sqlite" }
   | { name: "file"; provider: string }
   | { name: "s3"; provider: string };
@@ -256,6 +258,14 @@ export interface MySQLConnectionConfig {
   database: string;
 }
 
+export interface PostgreSQLConnectionConfig {
+  host: string;
+  port?: number;
+  user: string;
+  password: string;
+  database: string;
+}
+
 /** Connection configuration for SQLite databases */
 export interface SQLiteConnectionConfig {
   /** Path to the SQLite database file */
@@ -287,6 +297,7 @@ export interface S3ConnectionConfig {
 /** Union of all supported connection configurations */
 export type ConnectionConfig =
   | MySQLConnectionConfig
+  | PostgreSQLConnectionConfig
   | SQLiteConnectionConfig
   | FileConnectionConfig
   | S3ConnectionConfig;
@@ -382,6 +393,8 @@ export interface MigrationDefinition {
 
 /** Low-level database driver interface — implemented per database backend */
 export interface DatabaseDriver {
+  /** Database dialect identifier */
+  readonly dialect: DatabaseType;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   execute(sql: string, params?: unknown[]): Promise<any>;
