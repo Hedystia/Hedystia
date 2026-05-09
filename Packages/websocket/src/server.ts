@@ -1,9 +1,3 @@
-/**
- * Portable WebSocket server primitive.
- *
- * @packageDocumentation
- */
-
 import { type WebSocket as NodeWebSocket, WebSocketServer as WSServer } from "ws";
 
 import type {
