@@ -1,9 +1,3 @@
-/**
- * Bun-native HTTP + WebSocket adapter.
- *
- * @packageDocumentation
- */
-
 import type { ServeOptions, ServerWebSocket, UnifiedServer, WSData } from "./types";
 
 declare const Bun: any;

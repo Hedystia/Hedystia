@@ -1,10 +1,3 @@
-/**
- * Node.js HTTP + WebSocket adapter built on top of `node:http` and
- * `@hedystia/ws`.
- *
- * @packageDocumentation
- */
-
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from "node:http";
 import { createServer as createHttpServer } from "node:http";
 import type { Duplex } from "node:stream";

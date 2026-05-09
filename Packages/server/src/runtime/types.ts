@@ -1,14 +1,3 @@
-/**
- * Internal runtime contract used by the `hedystia` server.
- *
- * @remarks
- * Bun and Node have very different APIs for spinning up an HTTP server with
- * WebSocket support; this module abstracts both into a single contract that
- * `Hedystia.listen()` can target without caring about the host.
- *
- * @packageDocumentation
- */
-
 import type { ServerWebSocket, WebSocketHandlers, WSData } from "@hedystia/ws";
 
 export type { ServerWebSocket, WebSocketHandlers, WSData };

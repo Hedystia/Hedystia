@@ -1,16 +1,4 @@
 /**
- * Shared WebSocket types used across runtimes (Bun, Node.js, Deno).
- *
- * @remarks
- * The {@link ServerWebSocket} interface mirrors Bun's API so that handlers
- * written against Bun's native WebSocket continue to work unchanged when
- * `@hedystia/ws`'s portable {@link ServerWebSocket | server} is used
- * instead.
- *
- * @packageDocumentation
- */
-
-/**
  * Payload accepted by every `send`/`publish` method.
  *
  * @remarks

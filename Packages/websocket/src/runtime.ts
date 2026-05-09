@@ -1,11 +1,4 @@
 /**
- * Tiny runtime detection helpers used to pick the right WebSocket
- * implementation at module load time.
- *
- * @packageDocumentation
- */
-
-/**
  * String identifier of the JavaScript runtime hosting the current process.
  */
 export type Runtime = "bun" | "node" | "deno" | "browser" | "unknown";

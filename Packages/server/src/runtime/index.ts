@@ -1,13 +1,3 @@
-/**
- * Internal runtime dispatcher used by the `hedystia` server.
- *
- * @remarks
- * Selects the appropriate adapter ({@link serveBun} or {@link serveNode})
- * at module load time so `Hedystia.listen()` can stay runtime-agnostic.
- *
- * @packageDocumentation
- */
-
 import { detectRuntime } from "@hedystia/ws";
 import type { ServeOptions, UnifiedServer, WSData } from "./types";
 

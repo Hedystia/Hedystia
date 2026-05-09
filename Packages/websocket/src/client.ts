@@ -1,9 +1,3 @@
-/**
- * Runtime-aware WebSocket client primitives.
- *
- * @packageDocumentation
- */
-
 import type { ClientWebSocketOptions } from "./types";
 
 export type { ClientWebSocketOptions } from "./types";
