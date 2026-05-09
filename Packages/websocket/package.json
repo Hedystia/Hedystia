@@ -1,5 +1,5 @@
 {
-  "name": "@hedystia/websocket",
+  "name": "@hedystia/ws",
   "version": "2.2.13",
   "description": "Universal WebSocket primitives for Hedystia (Bun, Node.js, Deno)",
   "homepage": "https://docs.hedystia.com/plugins/websocket",
