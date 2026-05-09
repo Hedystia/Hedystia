@@ -1,0 +1,238 @@
+/**
+ * Shared WebSocket types used across runtimes (Bun, Node.js, Deno).
+ *
+ * @remarks
+ * The {@link ServerWebSocket} interface mirrors Bun's API so that handlers
+ * written against Bun's native WebSocket continue to work unchanged when
+ * `@hedystia/websocket`'s portable {@link ServerWebSocket | server} is used
+ * instead.
+ *
+ * @packageDocumentation
+ */
+
+/**
+ * Payload accepted by every `send`/`publish` method.
+ *
+ * @remarks
+ * Matches the WHATWG `WebSocket.send` signature plus the `Uint8Array`
+ * convenience accepted by Bun and the `ws` package.
+ */
+export type WSMessage = string | ArrayBuffer | Uint8Array;
+
+/**
+ * Bag of arbitrary, user-supplied state attached to a connection on
+ * upgrade and exposed to handlers as `ws.data`.
+ *
+ * @typeParam K - String key
+ * @typeParam V - Stored value
+ */
+export type WSData = Record<string, any>;
+
+/**
+ * The per-connection wrapper passed to every handler.
+ *
+ * @remarks
+ * The interface intentionally mirrors `Bun.ServerWebSocket` so that the
+ * same handler code works on Bun (native) and on Node.js (via
+ * {@link WebSocketServer}). Topic-based pub/sub is implemented in
+ * user-space when running outside Bun.
+ *
+ * @typeParam Data - Shape of the user-attached `data` field
+ *
+ * @example
+ * ```ts
+ * const handlers: WebSocketHandlers<{ user: string }> = {
+ *   open: (ws) => ws.subscribe(`user:${ws.data.user}`),
+ *   message: (ws, msg) => ws.publish(`user:${ws.data.user}`, msg),
+ * };
+ * ```
+ */
+export interface ServerWebSocket<Data extends WSData = WSData> {
+  /** User-supplied state attached to the socket on upgrade. */
+  readonly data: Data;
+  /** Standard WHATWG ready-state (`0` connecting, `1` open, `2` closing, `3` closed). */
+  readonly readyState: number;
+  /** Remote IP, taken from `X-Forwarded-For` when present. */
+  readonly remoteAddress: string;
+  /**
+   * Send a message to this socket only.
+   *
+   * @param message - Payload to send
+   * @param compress - Whether to compress (honoured on Bun, ignored on Node)
+   * @returns Number of bytes written (best-effort on Node)
+   */
+  send(message: WSMessage, compress?: boolean): number;
+  /**
+   * Close the connection.
+   *
+   * @param code - Close code (defaults to 1000)
+   * @param reason - Optional human-readable reason
+   */
+  close(code?: number, reason?: string): void;
+  /**
+   * Subscribe this socket to a topic so it receives subsequent
+   * {@link ServerWebSocket.publish | publish} or
+   * {@link WebSocketServer.publish | server.publish} broadcasts.
+   *
+   * @param topic - Topic name
+   */
+  subscribe(topic: string): void;
+  /**
+   * Unsubscribe this socket from a previously joined topic.
+   *
+   * @param topic - Topic name
+   */
+  unsubscribe(topic: string): void;
+  /**
+   * Broadcast a message to every other socket subscribed to `topic`.
+   *
+   * @remarks
+   * The sender is excluded by default — matching Bun's default behaviour.
+   *
+   * @param topic - Topic name
+   * @param message - Payload to broadcast
+   * @param compress - Whether to compress (honoured on Bun, ignored on Node)
+   */
+  publish(topic: string, message: WSMessage, compress?: boolean): void;
+  /**
+   * Check whether this socket is currently subscribed to `topic`.
+   *
+   * @param topic - Topic name
+   * @returns `true` when subscribed
+   */
+  isSubscribed(topic: string): boolean;
+  /**
+   * Batch multiple writes inside `cb`.
+   *
+   * @remarks
+   * On Bun this corresponds to `corked()`; on Node it is a no-op alias
+   * that simply invokes `cb(this)` synchronously.
+   *
+   * @param cb - Function invoked with the same socket
+   */
+  cork(cb: (ws: ServerWebSocket<Data>) => void): void;
+}
+
+/**
+ * Bun-style compression dictionary identifier.
+ *
+ * @remarks
+ * Used by Bun's `perMessageDeflate` configuration. The `@hedystia/websocket`
+ * server forwards the value to the underlying implementation, which only
+ * Bun interprets natively; Node falls back to defaults when the value is
+ * not a recognised `ws` shape.
+ */
+export type Compressor =
+  | "disable"
+  | "shared"
+  | "dedicated"
+  | "3KB"
+  | "4KB"
+  | "8KB"
+  | "16KB"
+  | "32KB"
+  | "64KB"
+  | "128KB"
+  | "256KB";
+
+/**
+ * Per-message deflate configuration.
+ *
+ * @remarks
+ * Accepts either a boolean (`true` enables defaults, `false` disables it)
+ * or a free-form object whose shape is forwarded verbatim to the underlying
+ * implementation. Bun's {@link Compressor} strings (`"3KB"`, `"shared"`, …)
+ * and the [`ws`](https://github.com/websockets/ws) package's
+ * `PerMessageDeflateOptions` (`zlibDeflateOptions`, `threshold`, …) are
+ * both supported by simply matching whatever the runtime expects.
+ */
+export type PerMessageDeflate =
+  | boolean
+  | (Record<string, any> & {
+      compress?: boolean | Compressor;
+      decompress?: boolean | Compressor;
+    });
+
+/**
+ * Construction options for {@link WebSocketServer}.
+ */
+export interface WebSocketServerOptions {
+  /** Maximum allowed payload in bytes. Defaults to the underlying library's default. */
+  maxPayload?: number;
+  /** Per-message deflate configuration. */
+  perMessageDeflate?: PerMessageDeflate;
+}
+
+/**
+ * Lifecycle handlers passed to {@link WebSocketServer}.
+ *
+ * @typeParam Data - Shape of the user-attached `data` field
+ */
+export interface WebSocketHandlers<Data extends WSData = WSData> {
+  /** Called for every inbound message. */
+  message: (ws: ServerWebSocket<Data>, message: WSMessage) => void | Promise<void>;
+  /** Called once the handshake completes successfully. */
+  open?: (ws: ServerWebSocket<Data>) => void | Promise<void>;
+  /** Called after the connection closes (clean or otherwise). */
+  close?: (ws: ServerWebSocket<Data>, code: number, reason: string) => void | Promise<void>;
+  /** Called when the underlying transport raises an error. */
+  error?: (ws: ServerWebSocket<Data>, error: Error) => void | Promise<void>;
+  /**
+   * Called when back-pressure is relieved.
+   *
+   * @remarks
+   * Only fired by Bun; Node-backed servers never invoke it.
+   */
+  drain?: (ws: ServerWebSocket<Data>) => void | Promise<void>;
+}
+
+/**
+ * Options accepted by {@link createWebSocket}.
+ */
+export interface ClientWebSocketOptions {
+  /** Sub-protocols negotiated during the handshake. */
+  protocols?: string | string[];
+  /**
+   * Custom request headers.
+   *
+   * @remarks
+   * Honoured on Node via the `ws` package; runtimes that ship a WHATWG
+   * `WebSocket` (Bun, Deno, browsers, Node ≥ 22) ignore them — matching
+   * standard WebSocket semantics.
+   */
+  headers?: Record<string, string>;
+}
+
+/**
+ * Raw upgrade tuple consumed by {@link WebSocketServer.upgrade}.
+ *
+ * @remarks
+ * Mirrors what `node:http`'s `'upgrade'` event emits and what the `ws`
+ * package's `WebSocketServer.handleUpgrade` consumes.
+ */
+export interface UpgradeRequest {
+  /** Raw `IncomingMessage`-like object exposing `headers`, `method`, `url`. */
+  rawRequest: any;
+  /** Raw duplex socket (e.g. `node:net.Socket`). */
+  socket: any;
+  /** Initial buffer captured by the HTTP parser. */
+  head: Buffer | Uint8Array;
+}
+
+/**
+ * Options forwarded to {@link WebSocketServer.upgrade}.
+ *
+ * @typeParam Data - Shape of the user-attached `data` field
+ */
+export interface UpgradeOptions<Data extends WSData = WSData> {
+  /** Initial value of `ws.data` for the new connection. */
+  data?: Data;
+  /**
+   * Extra response headers.
+   *
+   * @remarks
+   * Forwarded to the underlying handshake when supported (Bun); ignored on
+   * Node-backed upgrades, which control headers via the `ws` package.
+   */
+  headers?: Record<string, string> | Headers;
+}
