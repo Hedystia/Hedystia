@@ -332,7 +332,7 @@ describe("Column Types - S3", () => {
     database: "s3",
     connection: {
       bucket: "hedystia-test-coltypes",
-      endpoint: process.env.S3_URL || "http://localhost:9000",
+      endpoint: process.env.S3_URL || "http://localhost:9090",
       region: "us-east-1",
       accessKeyId: process.env.S3_KEY_ID || "admin",
       secretAccessKey: process.env.S3_ACCESS_KEY || "password",
@@ -349,7 +349,7 @@ describe("Column Types - S3", () => {
     } catch (err: any) {
       console.warn("S3 column-types skipped:", err.message);
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     try {

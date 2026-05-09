@@ -24,7 +24,7 @@ describe("S3 Driver", () => {
     database: "s3",
     connection: {
       bucket: "hedystia-test",
-      endpoint: process.env.S3_URL || "http://localhost:9000",
+      endpoint: process.env.S3_URL || "http://localhost:9090",
       region: "us-east-1",
       accessKeyId: process.env.S3_KEY_ID || "admin",
       secretAccessKey: process.env.S3_ACCESS_KEY || "password",
