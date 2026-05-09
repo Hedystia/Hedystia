@@ -30,7 +30,6 @@ export function resolveWebSocket(): typeof WebSocket {
   if (typeof globalThis !== "undefined" && (globalThis as any).WebSocket) {
     return (globalThis as any).WebSocket as typeof WebSocket;
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const mod = require("ws");
   return (mod.WebSocket ?? mod) as typeof WebSocket;
 }
