@@ -212,8 +212,24 @@ export class SQLiteDriver extends BaseDriver {
   async query(sql: string, params: unknown[] = []): Promise<any[]> {
     try {
       const stmt = this.db!.prepare(sql);
-      return await stmt.all(...this.formatParams(params));
+      const formatted = this.formatParams(params);
+
+      if ((stmt as any).reader === false) {
+        await stmt.run(...formatted);
+        return [];
+      }
+
+      return await stmt.all(...formatted);
     } catch (err: any) {
+      if (err.message?.includes("Use run() instead")) {
+        try {
+          const stmt = this.db!.prepare(sql);
+          await stmt.run(...this.formatParams(params));
+          return [];
+        } catch (innerErr) {
+          throw innerErr;
+        }
+      }
       throw new DriverError(`SQLite query error: ${err.message}`);
     }
   }
@@ -222,6 +238,9 @@ export class SQLiteDriver extends BaseDriver {
     return params.map((p) => {
       if (p instanceof Date) {
         return p.toISOString();
+      }
+      if (typeof p === "boolean") {
+        return p ? 1 : 0;
       }
       return p;
     });
