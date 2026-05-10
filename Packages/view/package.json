@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/view",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "Reactive UI engine — fine-grained signals, no Virtual DOM, real DOM nodes",
   "homepage": "https://docs.hedystia.com",
   "private": false,

@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/adapter",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
   "homepage": "https://docs.hedystia.com/plugins/adapter",
   "devDependencies": {
