@@ -103,6 +103,7 @@ describe("Test SSE subscriptions", () => {
 
     await wait(200);
     sub.unsubscribe();
+    await wait(100);
 
     expect(logs.length).toBeGreaterThan(0);
   });
@@ -124,6 +125,7 @@ describe("Test SSE subscriptions", () => {
 
     await wait(200);
     sub1.unsubscribe();
+    await wait(100);
 
     expect(logs).toContain("Data: 123 - Success");
   });
@@ -137,6 +139,7 @@ describe("Test SSE subscriptions", () => {
     expect(true).toBe(true);
 
     sub.unsubscribe();
+    await wait(100);
   });
 
   it("should trigger lifecycle events on subscribe/unsubscribe", async () => {
