@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/validations",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
   "homepage": "https://docs.hedystia.com/validations/start",
   "devDependencies": {
