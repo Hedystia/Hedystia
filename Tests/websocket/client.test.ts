@@ -1,34 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { createServer, type Server as HttpServer } from "node:http";
-import { createWebSocket, resolveWebSocket, WebSocketClient, WebSocketServer } from "@hedystia/ws";
+import type { ServeInfo } from "@hedystia/ws";
+import { createWebSocket, resolveWebSocket, serve, WebSocketClient } from "@hedystia/ws";
 
 const PORT = 38951;
-let httpServer: HttpServer;
-let wss: WebSocketServer;
+let server: ServeInfo;
 
 beforeAll(async () => {
-  wss = new WebSocketServer({
-    open: (ws) => {
-      ws.send("welcome");
+  server = await serve(
+    {
+      open: (ws) => {
+        ws.send("welcome");
+      },
+      message: (ws, msg) => {
+        const text = typeof msg === "string" ? msg : new TextDecoder().decode(msg as Uint8Array);
+        ws.send(`echo:${text}`);
+      },
     },
-    message: (ws, msg) => {
-      const text = typeof msg === "string" ? msg : new TextDecoder().decode(msg as Uint8Array);
-      ws.send(`echo:${text}`);
-    },
-  });
-
-  httpServer = createServer((_req, res) => res.end("ok"));
-  httpServer.on("upgrade", (req, socket, head) => {
-    wss.upgrade({ rawRequest: req, socket, head }).catch(() => socket.destroy());
-  });
-
-  await new Promise<void>((resolve) => httpServer.listen(PORT, resolve));
+    { port: PORT, hostname: "127.0.0.1" },
+  );
 });
 
 afterAll(async () => {
-  wss.close(true);
-  httpServer.closeAllConnections?.();
-  await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  await server.stop(true);
 });
 
 describe("@hedystia/ws/client — resolveWebSocket()", () => {
@@ -45,7 +38,7 @@ describe("@hedystia/ws/client — resolveWebSocket()", () => {
 
 describe("@hedystia/ws/client — createWebSocket()", () => {
   it("connects and exchanges a welcome + echo round-trip", async () => {
-    const ws = createWebSocket(`ws://127.0.0.1:${PORT}`);
+    const ws = createWebSocket(`ws://127.0.0.1:${server.port}`);
     const messages: string[] = [];
 
     await new Promise<void>((resolve, reject) => {
@@ -67,7 +60,7 @@ describe("@hedystia/ws/client — createWebSocket()", () => {
   });
 
   it("ignores subprotocols when none provided", async () => {
-    const ws = createWebSocket(`ws://127.0.0.1:${PORT}`);
+    const ws = createWebSocket(`ws://127.0.0.1:${server.port}`);
     await new Promise<void>((resolve, reject) => {
       ws.onopen = () => {
         expect(ws.readyState).toBe(1);
@@ -81,7 +74,7 @@ describe("@hedystia/ws/client — createWebSocket()", () => {
 
 describe("@hedystia/ws/client — WebSocketClient", () => {
   it("exposes a writable event-handler surface", async () => {
-    const client = new WebSocketClient(`ws://127.0.0.1:${PORT}`);
+    const client = new WebSocketClient(`ws://127.0.0.1:${server.port}`);
     const messages: string[] = [];
 
     await new Promise<void>((resolve, reject) => {
@@ -102,7 +95,7 @@ describe("@hedystia/ws/client — WebSocketClient", () => {
   });
 
   it("readyState reflects underlying socket state", async () => {
-    const client = new WebSocketClient(`ws://127.0.0.1:${PORT}`);
+    const client = new WebSocketClient(`ws://127.0.0.1:${server.port}`);
     expect(client.readyState).toBe(0);
     await new Promise<void>((resolve, reject) => {
       client.onopen = () => {

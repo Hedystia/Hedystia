@@ -1,82 +1,81 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { createServer, type Server as HttpServer } from "node:http";
-import { type ServerWebSocket, WebSocketServer } from "@hedystia/ws";
+import { type ServeInfo, type ServerWebSocket, serve } from "@hedystia/ws";
 
-type CtxData = { id: string; subscribedTopics?: Set<string> };
+type CtxData = { id: string };
 
 const PORT = 38961;
 
-let httpServer: HttpServer;
-let wss: WebSocketServer<CtxData>;
+let server: ServeInfo;
 const openSockets: Array<ServerWebSocket<CtxData>> = [];
 const lastMessages: Array<{ id: string; payload: string }> = [];
 let lastClosedId: string | null = null;
 
-const baseUrl = `ws://127.0.0.1:${PORT}`;
+let baseUrl: string;
 
 beforeAll(async () => {
-  wss = new WebSocketServer<CtxData>({
-    open: (ws) => {
-      openSockets.push(ws);
-    },
-    message: (ws, msg) => {
-      const text = typeof msg === "string" ? msg : new TextDecoder().decode(msg as Uint8Array);
-      lastMessages.push({ id: ws.data.id, payload: text });
+  server = await serve<CtxData>(
+    {
+      open: (ws) => {
+        openSockets.push(ws);
+      },
+      message: (ws, msg) => {
+        const text = typeof msg === "string" ? msg : new TextDecoder().decode(msg as Uint8Array);
+        lastMessages.push({ id: ws.data.id, payload: text });
 
-      if (text.startsWith("sub:")) {
-        ws.subscribe(text.slice(4));
-        ws.send("subscribed");
-        return;
-      }
-      if (text.startsWith("unsub:")) {
-        ws.unsubscribe(text.slice(6));
-        ws.send("unsubscribed");
-        return;
-      }
-      if (text.startsWith("is-sub:")) {
-        ws.send(String(ws.isSubscribed(text.slice(7))));
-        return;
-      }
-      if (text.startsWith("pub-peers:")) {
-        const [topic, body] = text.slice("pub-peers:".length).split("|");
-        ws.publish(topic!, body!);
-        ws.send("peer-published");
-        return;
-      }
-      if (text === "binary") {
-        ws.send(new Uint8Array([1, 2, 3, 4]));
-        return;
-      }
-      if (text === "cork") {
-        let observed: ServerWebSocket<CtxData> | null = null;
-        ws.cork((inner) => {
-          observed = inner;
-          inner.send("corked");
-        });
-        ws.send(observed === ws ? "same" : "different");
-        return;
-      }
-      ws.send(`echo:${text}`);
+        if (text.startsWith("sub:")) {
+          ws.subscribe(text.slice(4));
+          ws.send("subscribed");
+          return;
+        }
+        if (text.startsWith("unsub:")) {
+          ws.unsubscribe(text.slice(6));
+          ws.send("unsubscribed");
+          return;
+        }
+        if (text.startsWith("is-sub:")) {
+          ws.send(String(ws.isSubscribed(text.slice(7))));
+          return;
+        }
+        if (text.startsWith("pub-peers:")) {
+          const [topic, body] = text.slice("pub-peers:".length).split("|");
+          ws.publish(topic!, body!);
+          ws.send("peer-published");
+          return;
+        }
+        if (text === "binary") {
+          ws.send(new Uint8Array([1, 2, 3, 4]));
+          return;
+        }
+        if (text === "cork") {
+          let observed: ServerWebSocket<CtxData> | null = null;
+          ws.cork((inner) => {
+            observed = inner;
+            inner.send("corked");
+          });
+          ws.send(observed === ws ? "same" : "different");
+          return;
+        }
+        ws.send(`echo:${text}`);
+      },
+      close: (ws) => {
+        lastClosedId = ws.data.id;
+      },
     },
-    close: (ws) => {
-      lastClosedId = ws.data.id;
+    {
+      port: PORT,
+      hostname: "127.0.0.1",
+      resolveData: (req: any) => {
+        const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
+        return { id: url.searchParams.get("id") ?? "anon" };
+      },
     },
-  });
+  );
 
-  httpServer = createServer((_req, res) => res.end("ok"));
-  httpServer.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
-    const id = url.searchParams.get("id") ?? "anon";
-    wss.upgrade({ rawRequest: req, socket, head }, { data: { id } }).catch(() => socket.destroy());
-  });
-
-  await new Promise<void>((resolve) => httpServer.listen(PORT, resolve));
+  baseUrl = `ws://127.0.0.1:${server.port}`;
 });
 
 afterAll(async () => {
-  wss.close(true);
-  httpServer.closeAllConnections?.();
-  await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  await server.stop(true);
 });
 
 function connect(id: string): Promise<WebSocket> {
@@ -106,7 +105,6 @@ describe("WebSocketServer — lifecycle", () => {
     const before = openSockets.length;
     const ws = await connect("alpha");
 
-    // small wait for `open` to land
     await new Promise((r) => setTimeout(r, 30));
     expect(openSockets.length).toBe(before + 1);
     expect(openSockets[openSockets.length - 1]!.data.id).toBe("alpha");
@@ -185,7 +183,7 @@ describe("WebSocketServer — pub/sub", () => {
       await nextMessage(ws, (d) => d === "subscribed");
     }
 
-    const count = wss.publish("room-y", "broadcast");
+    const count = server.publish("room-y", "broadcast");
     expect(count).toBe(2);
 
     expect(await nextMessage(a, (d) => d === "broadcast")).toBe("broadcast");
@@ -196,7 +194,7 @@ describe("WebSocketServer — pub/sub", () => {
   });
 
   it("server.publish() returns 0 for unknown topics", () => {
-    expect(wss.publish("never-subscribed", "x")).toBe(0);
+    expect(server.publish("never-subscribed", "x")).toBe(0);
   });
 
   it("publish skips closed sockets and cleans on close", async () => {
@@ -211,7 +209,7 @@ describe("WebSocketServer — pub/sub", () => {
     a.close();
     await new Promise((r) => setTimeout(r, 100));
 
-    const count = wss.publish("room-z", "after-close");
+    const count = server.publish("room-z", "after-close");
     expect(count).toBe(1);
 
     expect(await nextMessage(b, (d) => d === "after-close")).toBe("after-close");
