@@ -18,7 +18,7 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       include: ["../Packages/**/src/**"],
     },
-    pool: "threads",
+    pool: "forks",
     isolate: true,
   },
 });

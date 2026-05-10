@@ -59,7 +59,7 @@ export class SQLiteDriver extends BaseDriver {
 
     if (!provider || provider === "better-sqlite3") {
       try {
-        const BetterSqlite3 = await import("better-sqlite3");
+        const BetterSqlite3 = await import("better-sqlite3" as any);
         const Database = BetterSqlite3.default || BetterSqlite3;
         return new Database(this.config.filename) as any;
       } catch (err) {
