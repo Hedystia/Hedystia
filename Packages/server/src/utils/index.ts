@@ -2,18 +2,16 @@ export type { DebugLevel } from "./debug";
 export { createLogger } from "./debug";
 
 export async function parseRequestBody(req: Request): Promise<any> {
-  const contentType = req.headers.get("Content-Type") || "";
+  const contentType = (req.headers.get("Content-Type") || "").toLowerCase();
 
   if (!contentType) {
     return req.text();
   }
 
-  const c = contentType.charCodeAt(12);
-
-  if (c === 106) {
+  if (contentType.includes("application/json")) {
     return await req.json();
   }
-  if (c === 120) {
+  if (contentType.includes("application/x-www-form-urlencoded")) {
     const text = await req.text();
     const params = new URLSearchParams(text);
     return Object.fromEntries(params.entries());
