@@ -13,31 +13,33 @@ export class TransformSchema<I, In, Out> extends BaseSchema<I, Out> {
     this.jsonSchema = { ...innerSchema.jsonSchema };
   }
 
-  readonly "~standard": CombinedStandardProps<I, Out> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      const r = this.innerSchema["~standard"].validate(value) as StandardSchemaV1.Result<In>;
-      if ("issues" in r) {
-        return r as StandardSchemaV1.Result<Out>;
-      }
-      try {
-        return { value: this.fn(r.value) };
-      } catch (e) {
-        return {
-          issues: [{ message: e instanceof Error ? e.message : "Transform failed" }],
-        };
-      }
-    },
-    types: {
-      input: {} as I,
-      output: {} as Out,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, Out> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        const r = this.innerSchema["~standard"].validate(value) as StandardSchemaV1.Result<In>;
+        if ("issues" in r) {
+          return r as StandardSchemaV1.Result<Out>;
+        }
+        try {
+          return { value: this.fn(r.value) };
+        } catch (e) {
+          return {
+            issues: [{ message: e instanceof Error ? e.message : "Transform failed" }],
+          };
+        }
+      },
+      types: {
+        input: {} as I,
+        output: {} as Out,
+      },
+    };
+  }
 }
 
 export class PipeSchema<I, A, B> extends BaseSchema<I, B> {
@@ -51,23 +53,25 @@ export class PipeSchema<I, A, B> extends BaseSchema<I, B> {
     this.jsonSchema = { ...first.jsonSchema };
   }
 
-  readonly "~standard": CombinedStandardProps<I, B> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.first.jsonSchema,
-      output: () => this.second.jsonSchema ?? this.first.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      const r1 = this.first["~standard"].validate(value) as StandardSchemaV1.Result<A>;
-      if ("issues" in r1) {
-        return r1 as StandardSchemaV1.Result<B>;
-      }
-      return this.second["~standard"].validate(r1.value) as StandardSchemaV1.Result<B>;
-    },
-    types: {
-      input: {} as I,
-      output: {} as B,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, B> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.first.jsonSchema,
+        output: () => this.second.jsonSchema ?? this.first.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        const r1 = this.first["~standard"].validate(value) as StandardSchemaV1.Result<A>;
+        if ("issues" in r1) {
+          return r1 as StandardSchemaV1.Result<B>;
+        }
+        return this.second["~standard"].validate(r1.value) as StandardSchemaV1.Result<B>;
+      },
+      types: {
+        input: {} as I,
+        output: {} as B,
+      },
+    };
+  }
 }

@@ -2,7 +2,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { CombinedStandardProps, Schema } from "./types";
 
 export abstract class BaseSchema<I, O> implements Schema<I, O> {
-  abstract readonly "~standard": CombinedStandardProps<I, O>;
+  abstract get ["~standard"](): CombinedStandardProps<I, O>;
   jsonSchema: any = {};
   get inferred(): O {
     return null as unknown as O;
@@ -73,6 +73,36 @@ export abstract class BaseSchema<I, O> implements Schema<I, O> {
   ): InstanceOfSchema<I, InstanceType<C>> {
     return new InstanceOfSchema<I, InstanceType<C>>(this, constructor);
   }
+
+  /**
+   * Validate value and throw if invalid.
+   * @param {unknown} value Value to validate.
+   * @returns {O | Promise<O>} Validated value.
+   */
+  parse(value: unknown): O | Promise<O> {
+    const result = this["~standard"].validate(value);
+    if (result instanceof Promise) {
+      return result.then((r) => {
+        if (r.issues) {
+          throw new Error(r.issues[0]!.message);
+        }
+        return r.value as O;
+      });
+    }
+    if (result.issues) {
+      throw new Error(result.issues[0]!.message);
+    }
+    return result.value as O;
+  }
+
+  /**
+   * Validate value and return a result object.
+   * @param {unknown} value Value to validate.
+   * @returns {Result<O> | Promise<Result<O>>} Validation result.
+   */
+  safeParse(value: unknown): any {
+    return this["~standard"].validate(value);
+  }
 }
 
 export class OptionalSchema<I, O> extends BaseSchema<I, O | undefined> {
@@ -84,24 +114,26 @@ export class OptionalSchema<I, O> extends BaseSchema<I, O | undefined> {
     this.jsonSchema = { ...schema.jsonSchema };
   }
 
-  readonly "~standard": CombinedStandardProps<I, O | undefined> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (value === undefined || value === null) {
-        return { value: undefined };
-      }
-      return this.innerSchema["~standard"].validate(value);
-    },
-    types: {
-      input: {} as I,
-      output: {} as O | undefined,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, O | undefined> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (value === undefined || value === null) {
+          return { value: undefined };
+        }
+        return this.innerSchema["~standard"].validate(value);
+      },
+      types: {
+        input: {} as I,
+        output: {} as O | undefined,
+      },
+    };
+  }
 }
 
 export class NullSchemaType extends BaseSchema<unknown, null> {
@@ -111,30 +143,32 @@ export class NullSchemaType extends BaseSchema<unknown, null> {
     this.jsonSchema = { type: "null" };
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, null> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (value !== null) {
-        return {
-          issues: [
-            {
-              message: `Expected null, received ${value === undefined ? "undefined" : typeof value}`,
-            },
-          ],
-        };
-      }
-      return { value: null };
-    },
-    types: {
-      input: {} as unknown,
-      output: {} as unknown as null,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<unknown, null> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (value !== null) {
+          return {
+            issues: [
+              {
+                message: `Expected null, received ${value === undefined ? "undefined" : typeof value}`,
+              },
+            ],
+          };
+        }
+        return { value: null };
+      },
+      types: {
+        input: {} as unknown,
+        output: {} as unknown as null,
+      },
+    };
+  }
 }
 
 export class LiteralSchema<I, T extends string | number | boolean> extends BaseSchema<I, T> {
@@ -149,26 +183,28 @@ export class LiteralSchema<I, T extends string | number | boolean> extends BaseS
     };
   }
 
-  readonly "~standard": CombinedStandardProps<I, T> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (value !== this.value) {
-        return {
-          issues: [{ message: `Expected literal value ${this.value}, received ${value}` }],
-        };
-      }
-      return { value: value as T };
-    },
-    types: {
-      input: {} as I,
-      output: {} as T,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, T> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (value !== this.value) {
+          return {
+            issues: [{ message: `Expected literal value ${this.value}, received ${value}` }],
+          };
+        }
+        return { value: value as T };
+      },
+      types: {
+        input: {} as I,
+        output: {} as T,
+      },
+    };
+  }
 }
 
 export class UnionSchema<I, O> extends BaseSchema<I, O> {
@@ -179,31 +215,33 @@ export class UnionSchema<I, O> extends BaseSchema<I, O> {
     this.jsonSchema = { anyOf: schemas.map((s) => s.jsonSchema) };
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      const issuesAccum: StandardSchemaV1.Issue[] = [];
-      for (const schema of this.schemas) {
-        const result = schema["~standard"].validate(value) as StandardSchemaV1.Result<any>;
-        if (!("issues" in result)) {
-          return { value: result.value };
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        const issuesAccum: StandardSchemaV1.Issue[] = [];
+        for (const schema of this.schemas) {
+          const result = schema["~standard"].validate(value) as StandardSchemaV1.Result<any>;
+          if (!("issues" in result)) {
+            return { value: result.value };
+          }
+          if (result.issues) {
+            issuesAccum.push(...result.issues);
+          }
         }
-        if (result.issues) {
-          issuesAccum.push(...result.issues);
-        }
-      }
-      return { issues: issuesAccum };
-    },
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+        return { issues: issuesAccum };
+      },
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }
 
 export class ArraySchema<I, O extends any[]> extends BaseSchema<I, O> {
@@ -257,62 +295,64 @@ export class ArraySchema<I, O extends any[]> extends BaseSchema<I, O> {
     return schema;
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (!Array.isArray(value)) {
-        return {
-          issues: [{ message: `Expected array, received ${typeof value}` }],
-        };
-      }
-
-      if (this._nonEmpty && value.length === 0) {
-        return { issues: [{ message: "Array must be non-empty" }] };
-      }
-      if (this._minLength !== undefined && value.length < this._minLength) {
-        return { issues: [{ message: `Array shorter than ${this._minLength}` }] };
-      }
-      if (this._maxLength !== undefined && value.length > this._maxLength) {
-        return { issues: [{ message: `Array longer than ${this._maxLength}` }] };
-      }
-
-      const results = value.map((item, index) => {
-        const result = this.innerSchema["~standard"].validate(item) as StandardSchemaV1.Result<
-          O[number]
-        >;
-        if ("issues" in result) {
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (!Array.isArray(value)) {
           return {
-            index,
-            issues: result.issues?.map((issue) => ({
-              ...issue,
-              path: issue.path ? [index, ...issue.path] : [index],
-            })),
+            issues: [{ message: `Expected array, received ${typeof value}` }],
           };
         }
-        return { index, value: result.value };
-      });
 
-      const errors = results.filter((r) => "issues" in r) as {
-        index: number;
-        issues: StandardSchemaV1.Issue[];
-      }[];
+        if (this._nonEmpty && value.length === 0) {
+          return { issues: [{ message: "Array must be non-empty" }] };
+        }
+        if (this._minLength !== undefined && value.length < this._minLength) {
+          return { issues: [{ message: `Array shorter than ${this._minLength}` }] };
+        }
+        if (this._maxLength !== undefined && value.length > this._maxLength) {
+          return { issues: [{ message: `Array longer than ${this._maxLength}` }] };
+        }
 
-      if (errors.length > 0) {
-        return { issues: errors.flatMap((e) => e.issues) };
-      }
+        const results = value.map((item, index) => {
+          const result = this.innerSchema["~standard"].validate(item) as StandardSchemaV1.Result<
+            O[number]
+          >;
+          if ("issues" in result) {
+            return {
+              index,
+              issues: result.issues?.map((issue) => ({
+                ...issue,
+                path: issue.path ? [index, ...issue.path] : [index],
+              })),
+            };
+          }
+          return { index, value: result.value };
+        });
 
-      return { value: results.map((r) => ("value" in r ? r.value : null)) as O };
-    },
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+        const errors = results.filter((r) => "issues" in r) as {
+          index: number;
+          issues: StandardSchemaV1.Issue[];
+        }[];
+
+        if (errors.length > 0) {
+          return { issues: errors.flatMap((e) => e.issues) };
+        }
+
+        return { value: results.map((r) => ("value" in r ? r.value : null)) as O };
+      },
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }
 
 export class InstanceOfSchema<I, O> extends BaseSchema<I, O> {
@@ -328,27 +368,29 @@ export class InstanceOfSchema<I, O> extends BaseSchema<I, O> {
     this.jsonSchema = { ...schema.jsonSchema, instanceOf: classConstructor.name };
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (!(value instanceof this.classConstructor)) {
-        return {
-          issues: [{ message: `Expected instance of ${this.classConstructor.name}` }],
-        };
-      }
-      const result = this.innerSchema["~standard"].validate(value);
-      return result as StandardSchemaV1.Result<O>;
-    },
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (!(value instanceof this.classConstructor)) {
+          return {
+            issues: [{ message: `Expected instance of ${this.classConstructor.name}` }],
+          };
+        }
+        const result = this.innerSchema["~standard"].validate(value);
+        return result as StandardSchemaV1.Result<O>;
+      },
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }
 
 export function validatePrimitive(

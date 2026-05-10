@@ -19,18 +19,20 @@ export class LazySchema<I, O> extends BaseSchema<I, O> {
     return this.cached;
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.resolve().jsonSchema ?? {},
-      output: () => this.resolve().jsonSchema ?? {},
-    },
-    validate: (value: unknown) =>
-      this.resolve()["~standard"].validate(value) as StandardSchemaV1.Result<O>,
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.resolve().jsonSchema ?? {},
+        output: () => this.resolve().jsonSchema ?? {},
+      },
+      validate: (value: unknown) =>
+        this.resolve()["~standard"].validate(value) as StandardSchemaV1.Result<O>,
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }

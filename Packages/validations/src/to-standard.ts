@@ -44,6 +44,8 @@ export function toStandard<T>(schema: AnySchema): Schema<unknown, T> {
     enum: standardSchema.enum.bind(standardSchema),
     array: standardSchema.array.bind(standardSchema),
     instanceOf: standardSchema.instanceOf.bind(standardSchema),
+    parse: standardSchema.parse.bind(standardSchema),
+    safeParse: standardSchema.safeParse.bind(standardSchema),
   };
 }
 

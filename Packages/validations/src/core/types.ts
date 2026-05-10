@@ -68,7 +68,12 @@ export type Infer<S> = InferSchema<S>;
 export type InferOutput<S> = InferSchema<S>;
 export type InferInput<S> = S extends BaseSchema<infer I, any> ? I : unknown;
 
-export type CombinedStandardProps<I, O> = StandardSchemaV1.Props<I, O> & {
+export type Result<T> =
+  | { value: T; issues?: undefined }
+  | { value?: undefined; issues: ReadonlyArray<StandardSchemaV1.Issue> };
+
+export type CombinedStandardProps<I, O> = Omit<StandardSchemaV1.Props<I, O>, "validate"> & {
+  readonly validate: (value: unknown) => Result<O> | Promise<Result<O>>;
   readonly jsonSchema: StandardJSONSchemaV1.Converter;
 };
 
@@ -82,6 +87,8 @@ export interface Schema<I, O> {
   ): BaseSchema<I, Values[number]>;
   array(): BaseSchema<I, O[]>;
   instanceOf<C extends new (...args: any[]) => any>(constructor: C): BaseSchema<I, InstanceType<C>>;
+  parse(value: unknown): O | Promise<O>;
+  safeParse(value: unknown): Result<O> | Promise<Result<O>>;
   jsonSchema: any;
   readonly inferred: O;
   schema: Schema<I, O>;

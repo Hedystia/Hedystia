@@ -3,19 +3,21 @@ import type { CombinedStandardProps, SchemaPrimitive } from "../core/types";
 
 export class AnySchemaType extends BaseSchema<unknown, any> {
   readonly type: SchemaPrimitive = "any";
-  readonly "~standard": CombinedStandardProps<unknown, any> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => ({}),
-      output: () => ({}),
-    },
-    validate: (value: unknown) => ({ value }),
-    types: {
-      input: {} as unknown,
-      output: {} as any,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<unknown, any> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => ({}),
+        output: () => ({}),
+      },
+      validate: (value: unknown) => ({ value }),
+      types: {
+        input: {} as unknown,
+        output: {} as any,
+      },
+    };
+  }
 }
 
 export class UnknownSchemaType extends BaseSchema<unknown, unknown> {
@@ -24,19 +26,21 @@ export class UnknownSchemaType extends BaseSchema<unknown, unknown> {
     this.jsonSchema = {};
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, unknown> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => ({}),
-      output: () => ({}),
-    },
-    validate: (value: unknown) => ({ value }),
-    types: {
-      input: {} as unknown,
-      output: {} as unknown,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<unknown, unknown> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => ({}),
+        output: () => ({}),
+      },
+      validate: (value: unknown) => ({ value }),
+      types: {
+        input: {} as unknown,
+        output: {} as unknown,
+      },
+    };
+  }
 }
 
 export class NeverSchemaType extends BaseSchema<unknown, never> {
@@ -45,19 +49,21 @@ export class NeverSchemaType extends BaseSchema<unknown, never> {
     this.jsonSchema = { not: {} };
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, never> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: () => ({
-      issues: [{ message: "Value is never allowed" }],
-    }),
-    types: {
-      input: {} as unknown,
-      output: {} as never,
-    },
-  };
+  get ["~standard"](): CombinedStandardProps<unknown, never> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: () => ({
+        issues: [{ message: "Value is never allowed" }],
+      }),
+      types: {
+        input: {} as unknown,
+        output: {} as never,
+      },
+    };
+  }
 }

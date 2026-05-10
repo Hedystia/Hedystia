@@ -29,34 +29,36 @@ export class IntersectionSchema<I, O> extends BaseSchema<I, O> {
     this.jsonSchema = { allOf: schemas.map((s) => s.jsonSchema) };
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      let merged: any;
-      const issues: StandardSchemaV1.Issue[] = [];
-      for (const s of this.schemas) {
-        const r = s["~standard"].validate(value) as StandardSchemaV1.Result<any>;
-        if ("issues" in r) {
-          if (r.issues) {
-            issues.push(...r.issues);
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        let merged: any;
+        const issues: StandardSchemaV1.Issue[] = [];
+        for (const s of this.schemas) {
+          const r = s["~standard"].validate(value) as StandardSchemaV1.Result<any>;
+          if ("issues" in r) {
+            if (r.issues) {
+              issues.push(...r.issues);
+            }
+          } else {
+            merged = merged === undefined ? r.value : deepMerge(merged, r.value);
           }
-        } else {
-          merged = merged === undefined ? r.value : deepMerge(merged, r.value);
         }
-      }
-      if (issues.length > 0) {
-        return { issues };
-      }
-      return { value: merged as O };
-    },
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+        if (issues.length > 0) {
+          return { issues };
+        }
+        return { value: merged as O };
+      },
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }

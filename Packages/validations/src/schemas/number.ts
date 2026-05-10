@@ -54,37 +54,39 @@ export class NumberSchemaType extends BaseSchema<unknown, number> {
     return schema;
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, number> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (this._coerce && typeof value !== "number") {
-        const coerced = Number(value);
-        if (!Number.isNaN(coerced)) {
-          value = coerced;
+  get ["~standard"](): CombinedStandardProps<unknown, number> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (this._coerce && typeof value !== "number") {
+          const coerced = Number(value);
+          if (!Number.isNaN(coerced)) {
+            value = coerced;
+          }
         }
-      }
-      if (typeof value !== "number" || Number.isNaN(value)) {
-        return { issues: [{ message: `Expected number, received ${typeof value}` }] };
-      }
-      if (this._int && !Number.isInteger(value)) {
-        return { issues: [{ message: "Expected integer" }] };
-      }
-      if (this._min !== undefined && value < this._min) {
-        return { issues: [{ message: `Number less than ${this._min}` }] };
-      }
-      if (this._max !== undefined && value > this._max) {
-        return { issues: [{ message: `Number greater than ${this._max}` }] };
-      }
-      return { value };
-    },
-    types: {
-      input: {} as unknown,
-      output: {} as number,
-    },
-  };
+        if (typeof value !== "number" || Number.isNaN(value)) {
+          return { issues: [{ message: `Expected number, received ${typeof value}` }] };
+        }
+        if (this._int && !Number.isInteger(value)) {
+          return { issues: [{ message: "Expected integer" }] };
+        }
+        if (this._min !== undefined && value < this._min) {
+          return { issues: [{ message: `Number less than ${this._min}` }] };
+        }
+        if (this._max !== undefined && value > this._max) {
+          return { issues: [{ message: `Number greater than ${this._max}` }] };
+        }
+        return { value };
+      },
+      types: {
+        input: {} as unknown,
+        output: {} as number,
+      },
+    };
+  }
 }

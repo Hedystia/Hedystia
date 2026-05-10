@@ -127,91 +127,93 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
     return new ObjectSchemaType<Partial<T>>(next);
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, T> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown): StandardSchemaV1.Result<T> => {
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        return {
-          issues: [
-            {
-              message:
-                "Expected object, received " +
-                (value === null ? "null" : Array.isArray(value) ? "array" : typeof value),
-            },
-          ],
-        };
-      }
-
-      const obj = value as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const issues: StandardSchemaV1.Issue[] = [];
-
-      for (const key in this.definition) {
-        const schemaItem = this.definition[key];
-        const isOptional = schemaItem instanceof OptionalSchema;
-
-        if (!(key in obj) && !isOptional) {
-          issues.push({ message: `Missing required property: ${key}`, path: [key] });
-          continue;
+  get ["~standard"](): CombinedStandardProps<unknown, T> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown): StandardSchemaV1.Result<T> => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+          return {
+            issues: [
+              {
+                message:
+                  "Expected object, received " +
+                  (value === null ? "null" : Array.isArray(value) ? "array" : typeof value),
+              },
+            ],
+          };
         }
 
-        if (key in obj) {
-          if (typeof schemaItem === "string") {
-            const sp = schemaItem as SchemaPrimitive;
-            if (!validatePrimitive(sp, obj[key])) {
-              issues.push({
-                message: `Invalid type for property ${key}: expected ${sp}`,
-                path: [key],
-              });
-            } else {
+        const obj = value as Record<string, unknown>;
+        const result: Record<string, unknown> = {};
+        const issues: StandardSchemaV1.Issue[] = [];
+
+        for (const key in this.definition) {
+          const schemaItem = this.definition[key];
+          const isOptional = schemaItem instanceof OptionalSchema;
+
+          if (!(key in obj) && !isOptional) {
+            issues.push({ message: `Missing required property: ${key}`, path: [key] });
+            continue;
+          }
+
+          if (key in obj) {
+            if (typeof schemaItem === "string") {
+              const sp = schemaItem as SchemaPrimitive;
+              if (!validatePrimitive(sp, obj[key])) {
+                issues.push({
+                  message: `Invalid type for property ${key}: expected ${sp}`,
+                  path: [key],
+                });
+              } else {
+                result[key] = obj[key];
+              }
+            } else if (schemaItem instanceof BaseSchema) {
+              const r = schemaItem["~standard"].validate(obj[key]) as StandardSchemaV1.Result<any>;
+              if ("issues" in r) {
+                if (r.issues) {
+                  issues.push(
+                    ...r.issues.map((i) => ({
+                      ...i,
+                      path: i.path ? [key, ...i.path] : [key],
+                    })),
+                  );
+                }
+              } else {
+                result[key] = r.value;
+              }
+            }
+          }
+        }
+
+        if (this._strict) {
+          for (const key of Object.keys(obj)) {
+            if (!(key in this.definition)) {
+              issues.push({ message: `Unknown key: ${key}`, path: [key] });
+            }
+          }
+        } else if (this._passthrough) {
+          for (const key of Object.keys(obj)) {
+            if (!(key in this.definition)) {
               result[key] = obj[key];
             }
-          } else if (schemaItem instanceof BaseSchema) {
-            const r = schemaItem["~standard"].validate(obj[key]) as StandardSchemaV1.Result<any>;
-            if ("issues" in r) {
-              if (r.issues) {
-                issues.push(
-                  ...r.issues.map((i) => ({
-                    ...i,
-                    path: i.path ? [key, ...i.path] : [key],
-                  })),
-                );
-              }
-            } else {
-              result[key] = r.value;
-            }
           }
         }
-      }
 
-      if (this._strict) {
-        for (const key of Object.keys(obj)) {
-          if (!(key in this.definition)) {
-            issues.push({ message: `Unknown key: ${key}`, path: [key] });
-          }
+        if (issues.length > 0) {
+          return { issues };
         }
-      } else if (this._passthrough) {
-        for (const key of Object.keys(obj)) {
-          if (!(key in this.definition)) {
-            result[key] = obj[key];
-          }
-        }
-      }
 
-      if (issues.length > 0) {
-        return { issues };
-      }
-
-      return { value: result as T };
-    },
-    types: {
-      input: {} as unknown,
-      output: {} as T,
-    },
-  };
+        return { value: result as T };
+      },
+      types: {
+        input: {} as unknown,
+        output: {} as T,
+      },
+    };
+  }
 }

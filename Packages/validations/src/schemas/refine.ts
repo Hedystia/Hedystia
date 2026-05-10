@@ -17,36 +17,38 @@ export class RefineSchema<I, O> extends BaseSchema<I, O> {
     this.jsonSchema = { ...innerSchema.jsonSchema };
   }
 
-  readonly "~standard": CombinedStandardProps<I, O> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      const r = this.innerSchema["~standard"].validate(value) as StandardSchemaV1.Result<O>;
-      if ("issues" in r) {
-        return r;
-      }
-      const out = this.check(r.value);
-      if (out === true) {
+  get ["~standard"](): CombinedStandardProps<I, O> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        const r = this.innerSchema["~standard"].validate(value) as StandardSchemaV1.Result<O>;
+        if ("issues" in r) {
+          return r;
+        }
+        const out = this.check(r.value);
+        if (out === true) {
+          return { value: r.value };
+        }
+        if (out === false) {
+          return { issues: [{ message: this.defaultMessage }] };
+        }
+        if (typeof out === "string") {
+          return { issues: [{ message: out }] };
+        }
+        if (Array.isArray(out)) {
+          return { issues: out };
+        }
         return { value: r.value };
-      }
-      if (out === false) {
-        return { issues: [{ message: this.defaultMessage }] };
-      }
-      if (typeof out === "string") {
-        return { issues: [{ message: out }] };
-      }
-      if (Array.isArray(out)) {
-        return { issues: out };
-      }
-      return { value: r.value };
-    },
-    types: {
-      input: {} as I,
-      output: {} as O,
-    },
-  };
+      },
+      types: {
+        input: {} as I,
+        output: {} as O,
+      },
+    };
+  }
 }

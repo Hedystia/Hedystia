@@ -28,58 +28,60 @@ export class TupleSchema<I, T extends any[]> extends BaseSchema<I, T> {
     return new TupleSchema<I, T>(this.items, restSchema);
   }
 
-  readonly "~standard": CombinedStandardProps<I, T> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (!Array.isArray(value)) {
-        return { issues: [{ message: `Expected tuple/array, received ${typeof value}` }] };
-      }
-      if (!this.rest && value.length !== this.items.length) {
-        return {
-          issues: [
-            { message: `Expected tuple of length ${this.items.length}, got ${value.length}` },
-          ],
-        };
-      }
-      if (value.length < this.items.length) {
-        return {
-          issues: [{ message: `Tuple too short: expected at least ${this.items.length}` }],
-        };
-      }
-
-      const out: any[] = [];
-      const issues: StandardSchemaV1.Issue[] = [];
-
-      for (let i = 0; i < value.length; i++) {
-        const schema = i < this.items.length ? this.items[i]! : this.rest!;
-        const r = schema["~standard"].validate(value[i]) as StandardSchemaV1.Result<any>;
-        if ("issues" in r) {
-          if (r.issues) {
-            issues.push(
-              ...r.issues.map((iss) => ({
-                ...iss,
-                path: iss.path ? [i, ...iss.path] : [i],
-              })),
-            );
-          }
-        } else {
-          out.push(r.value);
+  get ["~standard"](): CombinedStandardProps<I, T> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (!Array.isArray(value)) {
+          return { issues: [{ message: `Expected tuple/array, received ${typeof value}` }] };
         }
-      }
+        if (!this.rest && value.length !== this.items.length) {
+          return {
+            issues: [
+              { message: `Expected tuple of length ${this.items.length}, got ${value.length}` },
+            ],
+          };
+        }
+        if (value.length < this.items.length) {
+          return {
+            issues: [{ message: `Tuple too short: expected at least ${this.items.length}` }],
+          };
+        }
 
-      if (issues.length > 0) {
-        return { issues };
-      }
-      return { value: out as T };
-    },
-    types: {
-      input: {} as I,
-      output: {} as T,
-    },
-  };
+        const out: any[] = [];
+        const issues: StandardSchemaV1.Issue[] = [];
+
+        for (let i = 0; i < value.length; i++) {
+          const schema = i < this.items.length ? this.items[i]! : this.rest!;
+          const r = schema["~standard"].validate(value[i]) as StandardSchemaV1.Result<any>;
+          if ("issues" in r) {
+            if (r.issues) {
+              issues.push(
+                ...r.issues.map((iss) => ({
+                  ...iss,
+                  path: iss.path ? [i, ...iss.path] : [i],
+                })),
+              );
+            }
+          } else {
+            out.push(r.value);
+          }
+        }
+
+        if (issues.length > 0) {
+          return { issues };
+        }
+        return { value: out as T };
+      },
+      types: {
+        input: {} as I,
+        output: {} as T,
+      },
+    };
+  }
 }

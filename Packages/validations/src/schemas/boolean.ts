@@ -13,29 +13,31 @@ export class BooleanSchemaType extends BaseSchema<unknown, boolean> {
     return this.type;
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, boolean> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (this._coerce && typeof value !== "boolean") {
-        if (value === "true" || value === 1 || value === "1") {
-          value = true;
-        } else if (value === "false" || value === 0 || value === "0") {
-          value = false;
+  get ["~standard"](): CombinedStandardProps<unknown, boolean> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (this._coerce && typeof value !== "boolean") {
+          if (value === "true" || value === 1 || value === "1") {
+            value = true;
+          } else if (value === "false" || value === 0 || value === "0") {
+            value = false;
+          }
         }
-      }
-      if (typeof value !== "boolean") {
-        return { issues: [{ message: `Expected boolean, received ${typeof value}` }] };
-      }
-      return { value };
-    },
-    types: {
-      input: {} as unknown,
-      output: {} as boolean,
-    },
-  };
+        if (typeof value !== "boolean") {
+          return { issues: [{ message: `Expected boolean, received ${typeof value}` }] };
+        }
+        return { value };
+      },
+      types: {
+        input: {} as unknown,
+        output: {} as boolean,
+      },
+    };
+  }
 }

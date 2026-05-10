@@ -123,54 +123,56 @@ export class StringSchemaType extends BaseSchema<unknown, string> {
     return schema;
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, string> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (this._coerce && typeof value !== "string") {
-        value = String(value);
-      }
+  get ["~standard"](): CombinedStandardProps<unknown, string> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (this._coerce && typeof value !== "string") {
+          value = String(value);
+        }
 
-      if (typeof value !== "string") {
-        return { issues: [{ message: `Expected string, received ${typeof value}` }] };
-      }
+        if (typeof value !== "string") {
+          return { issues: [{ message: `Expected string, received ${typeof value}` }] };
+        }
 
-      if (this._minLength !== undefined && value.length < this._minLength) {
-        return { issues: [{ message: `String shorter than ${this._minLength}` }] };
-      }
-      if (this._maxLength !== undefined && value.length > this._maxLength) {
-        return { issues: [{ message: `String longer than ${this._maxLength}` }] };
-      }
-      if (this._validateUUID && !this._isValidUUID(value)) {
-        return { issues: [{ message: "Invalid UUID format" }] };
-      }
-      if (this._validateRegex && !this._isValidRegex(value)) {
-        return { issues: [{ message: "Invalid regex format" }] };
-      }
-      if (this._validateEmail && !this._isValidEmail(value)) {
-        return { issues: [{ message: "Invalid email format" }] };
-      }
-      if (this._validatePhone && !this._isValidPhone(value)) {
-        return { issues: [{ message: "Invalid phone number format" }] };
-      }
-      if (this._validateDomain && !this._isValidDomain(value)) {
-        return { issues: [{ message: "Invalid domain format" }] };
-      }
-      if (this._validateDate && !this._isValidDate(value)) {
-        return { issues: [{ message: "Invalid date format" }] };
-      }
+        if (this._minLength !== undefined && value.length < this._minLength) {
+          return { issues: [{ message: `String shorter than ${this._minLength}` }] };
+        }
+        if (this._maxLength !== undefined && value.length > this._maxLength) {
+          return { issues: [{ message: `String longer than ${this._maxLength}` }] };
+        }
+        if (this._validateUUID && !this._isValidUUID(value)) {
+          return { issues: [{ message: "Invalid UUID format" }] };
+        }
+        if (this._validateRegex && !this._isValidRegex(value)) {
+          return { issues: [{ message: "Invalid regex format" }] };
+        }
+        if (this._validateEmail && !this._isValidEmail(value)) {
+          return { issues: [{ message: "Invalid email format" }] };
+        }
+        if (this._validatePhone && !this._isValidPhone(value)) {
+          return { issues: [{ message: "Invalid phone number format" }] };
+        }
+        if (this._validateDomain && !this._isValidDomain(value)) {
+          return { issues: [{ message: "Invalid domain format" }] };
+        }
+        if (this._validateDate && !this._isValidDate(value)) {
+          return { issues: [{ message: "Invalid date format" }] };
+        }
 
-      return { value };
-    },
-    types: {
-      input: {} as unknown,
-      output: {} as string,
-    },
-  };
+        return { value };
+      },
+      types: {
+        input: {} as unknown,
+        output: {} as string,
+      },
+    };
+  }
 
   private _isValidDate(value: string): boolean {
     const date = new Date(value);

@@ -17,56 +17,58 @@ export class MapSchema<K, V> extends BaseSchema<unknown, Map<K, V>> {
     };
   }
 
-  readonly "~standard": CombinedStandardProps<unknown, Map<K, V>> = {
-    version: 1,
-    vendor: "h-schema",
-    jsonSchema: {
-      input: () => this.jsonSchema,
-      output: () => this.jsonSchema,
-    },
-    validate: (value: unknown) => {
-      if (!(value instanceof Map)) {
-        return { issues: [{ message: "Expected Map" }] };
-      }
-      const issues: StandardSchemaV1.Issue[] = [];
-      const out = new Map<K, V>();
-      let i = 0;
-      for (const [k, v] of value.entries()) {
-        const kr = this.keySchema["~standard"].validate(k) as StandardSchemaV1.Result<K>;
-        const vr = this.valueSchema["~standard"].validate(v) as StandardSchemaV1.Result<V>;
-        if ("issues" in kr) {
-          if (kr.issues) {
-            issues.push(
-              ...kr.issues.map((iss) => ({
-                ...iss,
-                path: iss.path ? [i, "key", ...iss.path] : [i, "key"],
-              })),
-            );
+  get ["~standard"](): CombinedStandardProps<unknown, Map<K, V>> {
+    return {
+      version: 1,
+      vendor: "h-schema",
+      jsonSchema: {
+        input: () => this.jsonSchema,
+        output: () => this.jsonSchema,
+      },
+      validate: (value: unknown) => {
+        if (!(value instanceof Map)) {
+          return { issues: [{ message: "Expected Map" }] };
+        }
+        const issues: StandardSchemaV1.Issue[] = [];
+        const out = new Map<K, V>();
+        let i = 0;
+        for (const [k, v] of value.entries()) {
+          const kr = this.keySchema["~standard"].validate(k) as StandardSchemaV1.Result<K>;
+          const vr = this.valueSchema["~standard"].validate(v) as StandardSchemaV1.Result<V>;
+          if ("issues" in kr) {
+            if (kr.issues) {
+              issues.push(
+                ...kr.issues.map((iss) => ({
+                  ...iss,
+                  path: iss.path ? [i, "key", ...iss.path] : [i, "key"],
+                })),
+              );
+            }
           }
-        }
-        if ("issues" in vr) {
-          if (vr.issues) {
-            issues.push(
-              ...vr.issues.map((iss) => ({
-                ...iss,
-                path: iss.path ? [i, "value", ...iss.path] : [i, "value"],
-              })),
-            );
+          if ("issues" in vr) {
+            if (vr.issues) {
+              issues.push(
+                ...vr.issues.map((iss) => ({
+                  ...iss,
+                  path: iss.path ? [i, "value", ...iss.path] : [i, "value"],
+                })),
+              );
+            }
           }
+          if (!("issues" in kr) && !("issues" in vr)) {
+            out.set(kr.value, vr.value);
+          }
+          i++;
         }
-        if (!("issues" in kr) && !("issues" in vr)) {
-          out.set(kr.value, vr.value);
+        if (issues.length > 0) {
+          return { issues };
         }
-        i++;
-      }
-      if (issues.length > 0) {
-        return { issues };
-      }
-      return { value: out };
-    },
-    types: {
-      input: {} as unknown,
-      output: new Map() as Map<K, V>,
-    },
-  };
+        return { value: out };
+      },
+      types: {
+        input: {} as unknown,
+        output: new Map() as Map<K, V>,
+      },
+    };
+  }
 }
