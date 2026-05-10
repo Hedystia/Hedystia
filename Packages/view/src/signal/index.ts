@@ -4,6 +4,7 @@
 
 export type { Computed, Owner as OwnerType, ReadonlySignal, Signal } from "../types";
 export {
+  adopt,
   batch,
   cleanNode,
   cleanupSources,

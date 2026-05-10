@@ -81,6 +81,17 @@ export function val<T>(signal: Signal<T> | Computed<T> | (() => T)): T {
   return signal._value;
 }
 
+/** @internal - Register a computation or root with the current owner */
+export function adopt(node: Computation<any> | OwnerType): void {
+  if (Owner !== null) {
+    if (Owner._owned === null) {
+      Owner._owned = [node as any];
+    } else {
+      Owner._owned.push(node as any);
+    }
+  }
+}
+
 /** @internal - Remove a computation from all its source observer lists */
 export function cleanupSources(computation: Computation<any>): void {
   if (computation._sources !== null) {
@@ -113,9 +124,11 @@ export function runComputation<T>(computation: Computation<T>): T | undefined {
   const prevListener = Listener;
   const prevOwner = Owner;
 
+  cleanNode(computation);
   cleanupSources(computation);
+
   Listener = computation;
-  Owner = computation._owner;
+  Owner = computation;
 
   try {
     const value = computation._fn(computation._value as any);
@@ -278,6 +291,7 @@ export function memo<T>(fn: () => T): Computed<T> {
     _observers: null,
     _observerSlots: null,
     _owner: Owner,
+    _owned: null,
     _cleanups: null,
     _context: null,
     _suspense: null,
@@ -290,6 +304,9 @@ export function memo<T>(fn: () => T): Computed<T> {
   // Link computed and computation bidirectionally
   (computed as any)._computation = computation;
   (computation as any)._computed = computed;
+
+  // Register with parent owner
+  adopt(computation);
 
   // Make computed callable and proxy all properties to computed
   const callable = (() => {
@@ -432,6 +449,9 @@ export function createRoot<T>(fn: (dispose: () => void) => T): T {
   };
   Owner = root;
   Listener = null;
+
+  // Register with parent owner
+  adopt(root);
 
   try {
     return fn(() => cleanRoot(root));

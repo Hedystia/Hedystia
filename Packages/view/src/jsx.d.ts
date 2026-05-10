@@ -5,7 +5,18 @@
  */
 
 export namespace JSX {
-  export type Element = HTMLElement | SVGElement | DocumentFragment | Text | Comment | null;
+  export type Element =
+    | HTMLElement
+    | SVGElement
+    | DocumentFragment
+    | Text
+    | Comment
+    | string
+    | number
+    | boolean
+    | null
+    | undefined
+    | (() => Element | Element[]);
   export type ElementClass = never;
   export interface ElementChildrenAttribute {
     children: {};

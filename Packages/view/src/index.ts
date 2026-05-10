@@ -11,6 +11,7 @@ export { action, load } from "./fetch";
 // JSX runtime exports (for programmatic use)
 export {
   type ElementType,
+  effect,
   Fragment,
   type FunctionComponent,
   jsx,

@@ -4,11 +4,10 @@
  * Provides provider/consumer pattern for dependency injection.
  */
 
+import { effect } from "../jsx/element";
 import type { JSX } from "../jsx.d";
-import { sig, val } from "../signal";
-import type { Component, Context } from "../types";
-
-const contextMap = new Map<symbol, any>();
+import { Owner, set, sig, val } from "../signal";
+import type { Accessor, Component, Context } from "../types";
 
 /**
  * Create a typed context for dependency injection
@@ -20,24 +19,26 @@ const contextMap = new Map<symbol, any>();
  */
 export function ctx<T>(defaultValue?: T): Context<T> {
   const id = Symbol("context");
-  if (defaultValue !== undefined) {
-    contextMap.set(id, sig(defaultValue));
-  }
 
-  const Provider: Component<{ value: T; children: JSX.Element }> = (props) => {
-    const prevValue = contextMap.get(id);
-    const newSignal = sig(props.value);
-    contextMap.set(id, newSignal);
+  const Provider: Component<{ value: T | Accessor<T>; children: JSX.Element }> = (props) => {
+    if (Owner) {
+      if (!Owner._context) {
+        Owner._context = {};
+      }
 
-    try {
-      return props.children;
-    } finally {
-      if (prevValue !== undefined) {
-        contextMap.set(id, prevValue);
-      } else {
-        contextMap.delete(id);
+      const initialValue =
+        typeof props.value === "function" ? (props.value as Accessor<T>)() : props.value;
+      const valueSignal = sig(initialValue);
+      Owner._context[id] = valueSignal;
+
+      if (typeof props.value === "function") {
+        effect(() => {
+          set(valueSignal, (props.value as Accessor<T>)());
+        });
       }
     }
+
+    return props.children;
   };
 
   return {
@@ -57,10 +58,14 @@ export function ctx<T>(defaultValue?: T): Context<T> {
  * const theme = use(ThemeCtx);
  */
 export function use<T>(context: Context<T>): T {
-  const signal = contextMap.get(context._id);
-  if (signal !== undefined) {
-    return val(signal);
+  let curr = Owner;
+  while (curr) {
+    if (curr._context && context._id in curr._context) {
+      return val(curr._context[context._id]);
+    }
+    curr = curr._owner;
   }
+
   if (context._defaultValue !== undefined) {
     return context._defaultValue;
   }

@@ -6,7 +6,7 @@
 
 import { effect } from "../jsx/element";
 import { tick } from "../scheduler";
-import { createRoot, sig, onCleanup as signalOnCleanup, val } from "../signal";
+import { sig, onCleanup as signalOnCleanup, val } from "../signal";
 import type { Accessor } from "../types";
 
 /**
@@ -18,7 +18,7 @@ const isBrowser = typeof document !== "undefined";
 const pendingInsertions = new Map<Comment, () => void>();
 
 /** @internal - After inserting nodes, flush any pending insertions for markers among them */
-function flushPending(nodes: Node[]): void {
+export function flushPending(nodes: Node[]): void {
   for (const node of nodes) {
     if (node instanceof Comment && pendingInsertions.has(node)) {
       const pending = pendingInsertions.get(node)!;
@@ -46,7 +46,9 @@ function insertNodesAfter(marker: Comment, nodes: Node[]): void {
   if (marker.parentNode) {
     doInsert();
   } else {
+    // If no parent yet, we wait a bit, but also we can check if it's attached later.
     pendingInsertions.set(marker, doInsert);
+    // Use queueMicrotask as a fallback
     queueMicrotask(() => {
       if (pendingInsertions.has(marker) && marker.parentNode) {
         pendingInsertions.delete(marker);
@@ -71,7 +73,7 @@ function removeNodes(nodes: Node[]): void {
 }
 
 /** @internal - Resolve any content value into an array of DOM nodes */
-function resolveNodes(content: any): Node[] {
+export function resolveNodes(content: any): Node[] {
   if (content == null || content === false) {
     return [];
   }
@@ -85,14 +87,13 @@ function resolveNodes(content: any): Node[] {
     }
     return result;
   }
-  if (typeof Node !== "undefined" && content instanceof Node) {
-    return [content];
+  if (content instanceof DocumentFragment) {
+    return Array.from(content.childNodes);
   }
   if (
     content instanceof HTMLElement ||
     content instanceof Text ||
     content instanceof Comment ||
-    content instanceof DocumentFragment ||
     (typeof SVGElement !== "undefined" && content instanceof SVGElement)
   ) {
     return [content];
@@ -120,18 +121,20 @@ export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children
   }
 
   const container = document.createComment("show");
-  let currentNodes: Node[] = [];
+  const currentNodes: Node[] = [];
 
   effect(() => {
     const cond = typeof props.when === "function" ? (props.when as Accessor<T>)() : props.when;
 
     removeNodes(currentNodes);
-    currentNodes = [];
+    currentNodes.length = 0;
 
     if (cond) {
-      currentNodes = resolveNodes(props.children);
+      const nodes = resolveNodes(props.children);
+      currentNodes.push(...nodes);
     } else if (props.fallback) {
-      currentNodes = resolveNodes(props.fallback);
+      const nodes = resolveNodes(props.fallback);
+      currentNodes.push(...nodes);
     }
 
     if (currentNodes.length > 0) {
@@ -329,21 +332,28 @@ export function Portal(props: { mount?: HTMLElement; children: any }): any {
 
   const container = document.createComment("portal");
   const mountPoint = props.mount || document.body;
-  let rendered: Node[] = [];
+  const rendered: Node[] = [];
 
-  createRoot(() => {
-    rendered = resolveNodes(props.children);
+  const doRender = () => {
+    removeNodes(rendered);
+    const nodes = resolveNodes(props.children);
+    rendered.length = 0;
+    rendered.push(...nodes);
     for (const node of rendered) {
       mountPoint.appendChild(node);
     }
+  };
 
-    signalOnCleanup(() => {
-      for (const node of rendered) {
-        if (node.parentNode === mountPoint) {
-          mountPoint.removeChild(node);
-        }
-      }
-    });
+  effect(() => {
+    if (container.parentNode) {
+      doRender();
+    } else {
+      pendingInsertions.set(container, doRender);
+    }
+  });
+
+  signalOnCleanup(() => {
+    removeNodes(rendered);
   });
 
   return container;

@@ -6,8 +6,9 @@
  */
 
 import type { JSX } from "../jsx.d";
+import { flushPending } from "../render/flow";
 import { tick } from "../scheduler";
-import { Owner, runComputation } from "../signal";
+import { adopt, Owner, runComputation } from "../signal";
 import type { Accessor, Computation } from "../types";
 
 /**
@@ -312,6 +313,7 @@ export function effect(fn: () => void): void {
     _observers: null,
     _observerSlots: null,
     _owner: Owner,
+    _owned: null,
     _cleanups: null,
     _context: null,
     _suspense: null,
@@ -320,6 +322,7 @@ export function effect(fn: () => void): void {
     _state: 0,
     _updatedAt: null,
   };
+  adopt(computation);
   runComputation(computation);
 }
 
@@ -447,6 +450,9 @@ function appendSingleChild(element: Element | DocumentFragment, child: JSX.Child
     (typeof SVGElement !== "undefined" && child instanceof SVGElement)
   ) {
     element.appendChild(child);
+    if (child instanceof Comment || child instanceof DocumentFragment) {
+      flushPending([child]);
+    }
   }
 }
 

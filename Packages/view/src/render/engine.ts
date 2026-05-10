@@ -5,18 +5,17 @@
  */
 
 import { SVG_ATTR_MAP, SVG_ELEMENTS } from "../jsx/element";
-import { createRoot } from "../signal";
-import type { Component, Owner } from "../types";
+import { createRoot, Owner } from "../signal";
+import type { Component, Owner as OwnerType } from "../types";
+import { resolveNodes } from "./flow";
 
 /**
  * Application instance returned by mount
  */
 export interface ViewApp {
   dispose: () => void;
-  root: Owner | null;
+  root: OwnerType | null;
 }
-
-const currentOwner: Owner | null = null;
 
 /**
  * Mount a component to a target DOM element
@@ -31,14 +30,15 @@ export function mount(component: Component<{}>, target: HTMLElement): ViewApp {
   target.innerHTML = "";
 
   let dispose: (() => void) | null = null;
-  let root: Owner | null = null;
+  let root: OwnerType | null = null;
 
   createRoot((disposeFn) => {
     dispose = disposeFn;
-    root = currentOwner;
-    const element = component({}) as HTMLElement;
-    if (element) {
-      target.appendChild(element);
+    root = Owner;
+    const result = component({});
+    const nodes = resolveNodes(result);
+    for (const node of nodes) {
+      target.appendChild(node);
     }
   });
 

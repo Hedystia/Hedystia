@@ -79,6 +79,8 @@ export interface Computation<T> {
   /** @internal */
   _owner: Owner | null;
   /** @internal */
+  _owned: (Computation<any> | Owner)[] | null;
+  /** @internal */
   _cleanups: (() => void)[] | null;
   /** @internal */
   _context: any | null;
@@ -99,7 +101,7 @@ export interface Computation<T> {
  */
 export interface Owner {
   /** @internal */
-  _owned: Computation<any>[] | null;
+  _owned: (Computation<any> | Owner)[] | null;
   /** @internal */
   _cleanups: (() => void)[] | null;
   /** @internal */
@@ -154,7 +156,7 @@ export type FlowComponent<P extends Record<string, any> = {}, C = JSX.Children> 
 export interface Context<T> {
   _id: symbol;
   _defaultValue: T | undefined;
-  Provider: Component<{ value: T; children: JSX.Element }>;
+  Provider: Component<{ value: T | Accessor<T>; children: JSX.Element }>;
 }
 
 /**

@@ -4,7 +4,7 @@
  * Provides effect tracking and reactive subscriptions.
  */
 
-import { cleanupSources, Owner, runComputation, untrack, val } from "../signal";
+import { adopt, cleanupSources, Owner, runComputation, untrack, val } from "../signal";
 import type { Computation, ReadonlySignal } from "../types";
 
 /**
@@ -48,6 +48,7 @@ export function on<T>(track: () => T, run: (value: T, prev: T) => any | (() => v
     _observers: null,
     _observerSlots: null,
     _owner: Owner,
+    _owned: null,
     _cleanups: null,
     _context: null,
     _suspense: null,
@@ -56,6 +57,8 @@ export function on<T>(track: () => T, run: (value: T, prev: T) => any | (() => v
     _state: 0,
     _updatedAt: null,
   };
+
+  adopt(computation);
 
   // Run initial execution with proper Listener tracking
   runComputation(computation);
