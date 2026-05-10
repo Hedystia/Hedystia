@@ -3,6 +3,7 @@ export { createWebSocket, resolveWebSocket, WebSocketClient } from "./client";
 export type { Runtime } from "./runtime";
 export { detectRuntime, isBrowser, isBun, isDeno, isNode } from "./runtime";
 export type {
+  ServeInfo,
   ServerWebSocket,
   UpgradeOptions,
   UpgradeRequest,
@@ -12,8 +13,8 @@ export type {
   WSMessage,
 } from "./server";
 
-import { WebSocketServer } from "./server";
+import { serve, WebSocketServer } from "./server";
 
-export { WebSocketServer };
+export { serve, WebSocketServer };
 
 export default WebSocketServer;

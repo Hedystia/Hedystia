@@ -154,6 +154,17 @@ export interface WebSocketServerOptions {
    * future Bun-native integration.
    */
   perMessageDeflate?: PerMessageDeflate;
+  /**
+   * Called for each upgrade to determine the per-connection data.
+   *
+   * @remarks
+   * When using {@link WebSocketServer.start}, this is the only way to
+   * set custom `ws.data` based on the incoming request (e.g. URL params).
+   * On Node.js via `upgrade()`, pass `data` directly in `UpgradeOptions`.
+   *
+   * Receives the raw HTTP request (IncomingMessage on Node, Request on Bun).
+   */
+  resolveData?: (req: any) => Record<string, any>;
 }
 
 /**
