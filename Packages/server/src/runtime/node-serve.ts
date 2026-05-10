@@ -200,7 +200,7 @@ export function nodeRequestToWebRequest(req: IncomingMessage): Request {
     init.duplex = "half";
   }
 
-  return new Request(url.toString(), init as RequestInit);
+  return new Request(url.toString(), init);
 }
 
 /**
@@ -227,7 +227,21 @@ export async function writeWebResponseToNode(
   if (response.statusText) {
     res.statusMessage = response.statusText;
   }
+  const headersMap: Record<string, string | string[]> = {};
   for (const [key, value] of response.headers.entries()) {
+    const lowerKey = key.toLowerCase();
+    if (headersMap[lowerKey]) {
+      if (Array.isArray(headersMap[lowerKey])) {
+        (headersMap[lowerKey] as string[]).push(value);
+      } else {
+        headersMap[lowerKey] = [headersMap[lowerKey] as string, value];
+      }
+    } else {
+      headersMap[lowerKey] = value;
+    }
+  }
+
+  for (const [key, value] of Object.entries(headersMap)) {
     res.setHeader(key, value);
   }
 
