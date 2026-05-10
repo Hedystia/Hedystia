@@ -266,7 +266,7 @@ for (const provider of providers) {
         if (!initialized) {
           return;
         }
-        expect(db.users.update({ where: {}, data: { age: 99 } })).rejects.toThrow();
+        await expect(db.users.update({ where: {}, data: { age: 99 } })).rejects.toThrow();
       });
     });
 
@@ -284,7 +284,7 @@ for (const provider of providers) {
         if (!initialized) {
           return;
         }
-        expect(db.users.delete({ where: {} })).rejects.toThrow();
+        await expect(db.users.delete({ where: {} })).rejects.toThrow();
       });
     });
 
