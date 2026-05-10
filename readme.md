@@ -28,6 +28,7 @@
 | [`@hedystia/adapter`](./Packages/adapter) | [![npm](https://img.shields.io/npm/v/@hedystia/adapter.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/adapter) | Multi-runtime adapters — Cloudflare Workers, Node.js, Deno, Lambda, Vercel, Fastly Compute |
 | [`@hedystia/swagger`](./Packages/swagger) | [![npm](https://img.shields.io/npm/v/@hedystia/swagger.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/swagger) | OpenAPI/Swagger documentation auto-generated from your routes |
 | [`@hedystia/types`](./Packages/types) | [![npm](https://img.shields.io/npm/v/@hedystia/types.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/types) | Route type generation utility for end-to-end type safety |
+| [`@hedystia/ws`](./Packages/websocket) | [![npm](https://img.shields.io/npm/v/@hedystia/ws.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/ws) | Universal WebSocket primitives — server, client, runtime detection |
 
 ### Integrations
 

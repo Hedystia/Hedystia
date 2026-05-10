@@ -2,16 +2,7 @@
 
 Universal WebSocket primitives for [Hedystia](https://docs.hedystia.com).
 
-The package ships **no HTTP server**. It only exposes WebSocket pieces that
-work the same way on **Bun**, **Node.js** and **Deno**:
-
-- A runtime-aware **client constructor**.
-- A portable **`WebSocketServer`** that consumes raw HTTP upgrade tuples
-  and offers topic-based pub/sub, mirroring `Bun.ServerWebSocket`.
-- Shared **types** and **runtime detection** helpers.
-
-The HTTP layer (Bun.serve / `node:http`) is intentionally left to the
-caller (`hedystia` server uses it internally).
+Works on **Bun**, **Node.js** and **Deno** with a single API.
 
 ## Install
 
@@ -21,37 +12,33 @@ bun add @hedystia/ws
 npm install @hedystia/ws
 ```
 
-## Client
-
-```ts
-import { createWebSocket } from "@hedystia/ws/client";
-
-const ws = createWebSocket("ws://localhost:3000", {
-  headers: { authorization: "Bearer ..." },
-});
-
-ws.onopen = () => ws.send("hi");
-ws.onmessage = (event) => console.log(event.data);
-```
-
-`createWebSocket()` uses `globalThis.WebSocket` when available (Bun, Deno,
-browsers, Node ≥ 22) and falls back to the [`ws`](https://github.com/websockets/ws)
-package on older Node releases. Custom request headers are honoured on Node
-and ignored elsewhere — matching WHATWG semantics.
-
-A small ergonomic wrapper is also provided:
-
-```ts
-import { WebSocketClient } from "@hedystia/ws/client";
-
-const client = new WebSocketClient("ws://localhost:3000");
-client.onmessage = (e) => console.log(e.data);
-```
-
 ## Server
 
-The `WebSocketServer` does **not** open a port. Plug it into any HTTP
-runtime that exposes raw upgrade tuples (`req`, `socket`, `head`).
+### `serve()` — standalone (recommended)
+
+Auto-detects the runtime and starts a full HTTP+WebSocket server:
+
+```ts
+import { serve } from "@hedystia/ws";
+
+const server = await serve({
+  open: (ws) => ws.subscribe("global"),
+  message: (ws, msg) => ws.publish("global", msg),
+});
+
+console.log(`Listening on ${server.url}`);
+// Broadcast from anywhere
+server.publish("global", "hello everyone");
+await server.stop();
+```
+
+- **Bun:** delegates to `Bun.serve()` with native WebSocket.
+- **Node/Deno:** creates a `node:http` server with the built-in upgrade handler.
+
+### `WebSocketServer` — low-level
+
+Does **not** open a port. Plug it into any HTTP runtime that exposes raw
+upgrade tuples (`req`, `socket`, `head`).
 
 ```ts
 import { createServer } from "node:http";
@@ -74,7 +61,7 @@ http.listen(3000);
 wss.publish("room", "hello world");
 ```
 
-The wrapper exposed to handlers implements:
+### Socket API (both modes)
 
 | Method | Behaviour |
 |--------|-----------|
@@ -86,6 +73,28 @@ The wrapper exposed to handlers implements:
 | `ws.close(code, reason)` | Close the connection |
 | `ws.cork(cb)` | No-op alias for batching writes |
 | `ws.data` | User-supplied state attached on upgrade |
+
+## Client
+
+```ts
+import { createWebSocket } from "@hedystia/ws/client";
+
+const ws = createWebSocket("ws://localhost:3000", {
+  headers: { authorization: "Bearer ..." },
+});
+
+ws.onopen = () => ws.send("hi");
+ws.onmessage = (event) => console.log(event.data);
+```
+
+A small ergonomic wrapper is also provided:
+
+```ts
+import { WebSocketClient } from "@hedystia/ws/client";
+
+const client = new WebSocketClient("ws://localhost:3000");
+client.onmessage = (e) => console.log(e.data);
+```
 
 ## Runtime detection
 
