@@ -1,12 +1,18 @@
 {
   "name": "tests",
+  "private": true,
+  "scripts": {
+    "test": "vitest run --reporter=default --reporter=json --outputFile.json=../test-results.json",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "coverage": "vitest run --coverage"
+  },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/express": "^5.0.1"
-  },
-  "scripts": {
-    "dev": "bun --watch --no-clear-screen test",
-    "test": "bun test && bunx --bun vitest database/ --run"
+    "@types/express": "5.0.6",
+    "vitest": "4.1.5",
+    "happy-dom": "20.9.0",
+    "vite": "8.0.11"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1014.0",
@@ -19,6 +25,7 @@
     "@hedystia/swagger": "workspace:*",
     "@hedystia/types": "workspace:*",
     "@hedystia/validations": "workspace:*",
+    "@hedystia/astro": "workspace:*",
     "@hedystia/view": "workspace:*",
     "@hedystia/ws": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
@@ -26,7 +33,6 @@
     "better-auth": "^1.2.7",
     "better-sqlite3": "^12.8.0",
     "express": "^5.1.0",
-    "happy-dom": "^20.8.9",
     "hedystia": "workspace:*",
     "mysql": "^2.18.1",
     "mysql2": "^3.19.1",
@@ -38,8 +44,6 @@
     "sql.js": "^1.14.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
-    "typeorm": "0.3.22",
-    "vite": "^7.3.1",
-    "vitest": "^4.1.1"
+    "typeorm": "0.3.29"
   }
 }
