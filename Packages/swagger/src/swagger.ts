@@ -88,43 +88,75 @@ export class Swagger {
     (this.spec.paths as any)[normalizedPath][methodLower] = operationObject;
   }
 
+  private extractJsonSchema(schema: any): any {
+    if (!schema) {
+      return {};
+    }
+
+    const js = schema.jsonSchema || schema;
+
+    if (js.type || js.properties || js.$ref || js.items) {
+      const standardProps = [
+        "type",
+        "properties",
+        "required",
+        "items",
+        "enum",
+        "nullable",
+        "format",
+        "description",
+        "title",
+        "default",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "anyOf",
+        "oneOf",
+        "allOf",
+        "not",
+        "$ref",
+        "additionalProperties",
+      ];
+
+      const filtered: any = {};
+      for (const prop of standardProps) {
+        if (js[prop] !== undefined) {
+          filtered[prop] = js[prop];
+        }
+      }
+      return filtered;
+    }
+
+    return {};
+  }
+
   private buildParameters(schema: any) {
     const parameters: any[] = [];
 
-    if (schema.params) {
-      try {
-        const jsonSchema = schema.params;
-        if (jsonSchema.properties) {
-          Object.entries(jsonSchema.properties).forEach(([name, propSchema]: [string, any]) => {
-            parameters.push({
-              name,
-              in: "path",
-              required: jsonSchema.required?.includes(name) ?? true,
-              schema: propSchema,
-            });
-          });
-        }
-      } catch (e) {
-        console.error("Failed to convert params schema:", e);
-      }
+    const paramsSchema = this.extractJsonSchema(schema.params);
+    if (paramsSchema.properties) {
+      Object.entries(paramsSchema.properties).forEach(([name, propSchema]: [string, any]) => {
+        parameters.push({
+          name,
+          in: "path",
+          required: paramsSchema.required?.includes(name) ?? true,
+          schema: propSchema,
+        });
+      });
     }
 
-    if (schema.query) {
-      try {
-        const jsonSchema = schema.query;
-        if (jsonSchema.properties) {
-          Object.entries(jsonSchema.properties).forEach(([name, propSchema]: [string, any]) => {
-            parameters.push({
-              name,
-              in: "query",
-              required: jsonSchema.required?.includes(name) ?? false,
-              schema: propSchema,
-            });
-          });
-        }
-      } catch (e) {
-        console.error("Failed to convert query schema:", e);
-      }
+    const querySchema = this.extractJsonSchema(schema.query);
+    if (querySchema.properties) {
+      Object.entries(querySchema.properties).forEach(([name, propSchema]: [string, any]) => {
+        parameters.push({
+          name,
+          in: "query",
+          required: querySchema.required?.includes(name) ?? false,
+          schema: propSchema,
+        });
+      });
     }
 
     return parameters.length > 0 ? parameters : undefined;
@@ -136,7 +168,7 @@ export class Swagger {
     }
 
     try {
-      const jsonSchema = schema.body;
+      const jsonSchema = this.extractJsonSchema(schema.body);
       return {
         required: true,
         content: {
@@ -160,7 +192,7 @@ export class Swagger {
 
     if (schema.response) {
       try {
-        const jsonSchema = schema.response;
+        const jsonSchema = this.extractJsonSchema(schema.response);
         responses["200"].content = {
           "application/json": {
             schema: jsonSchema,
@@ -190,21 +222,6 @@ export class Swagger {
 
   generateHTML(): string {
     const hostname = new URL(this.host).hostname;
-
-    const extractJsonSchema = (schema: any): any => {
-      // biome-ignore lint/style/useBlockStatements: off
-      if (!schema) return {};
-
-      if (schema.jsonSchema) {
-        return schema.jsonSchema;
-      }
-
-      if (schema.type || schema.properties || schema.$ref) {
-        return schema;
-      }
-
-      return {};
-    };
 
     const groupedPaths: Record<
       string,
@@ -367,7 +384,7 @@ export class Swagger {
             let requestBodySection = "";
             if (operation.requestBody) {
               const schema = operation.requestBody.content?.["application/json"]?.schema;
-              const cleanSchema = extractJsonSchema(schema);
+              const cleanSchema = this.extractJsonSchema(schema);
 
               if (cleanSchema.properties) {
                 requestBodySection = `
@@ -400,7 +417,7 @@ export class Swagger {
               if (operation.requestBody) {
                 curlCommand += ` \\\n  -H 'Content-Type: application/json'`;
                 const schema = operation.requestBody.content?.["application/json"]?.schema;
-                const cleanSchema = extractJsonSchema(schema);
+                const cleanSchema = this.extractJsonSchema(schema);
 
                 if (cleanSchema.properties) {
                   const exampleData: Record<string, any> = {};
@@ -444,7 +461,7 @@ export class Swagger {
             const response200 = operation.responses?.["200"];
             if (response200?.content?.["application/json"]?.schema) {
               const schema = response200.content["application/json"].schema;
-              const cleanSchema = extractJsonSchema(schema);
+              const cleanSchema = this.extractJsonSchema(schema);
 
               responseSection = `
                                 <div>
