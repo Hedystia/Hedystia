@@ -201,7 +201,6 @@ export class HedystiaAdapter<Routes extends RouteDefinition[] = [], Macros exten
       method: req.method,
       headers,
       body,
-      duplex: "half",
     });
   }
 
