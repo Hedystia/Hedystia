@@ -222,13 +222,9 @@ export class SQLiteDriver extends BaseDriver {
       return await stmt.all(...formatted);
     } catch (err: any) {
       if (err.message?.includes("Use run() instead")) {
-        try {
-          const stmt = this.db!.prepare(sql);
-          await stmt.run(...this.formatParams(params));
-          return [];
-        } catch (innerErr) {
-          throw innerErr;
-        }
+        const stmt = this.db!.prepare(sql);
+        await stmt.run(...this.formatParams(params));
+        return [];
       }
       throw new DriverError(`SQLite query error: ${err.message}`);
     }
