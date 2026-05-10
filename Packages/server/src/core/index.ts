@@ -381,6 +381,9 @@ export default class Core<
       data?: DataSchema;
       error?: ErrorSchema;
       message?: MessageSchema;
+      description?: string;
+      summary?: string;
+      tags?: string[];
     } & { [K in EnabledMacros]?: true } = {} as any,
   ): Hedystia<
     [
@@ -404,15 +407,34 @@ export default class Core<
 
     const hasMacros = Object.keys(schema).some(
       (key) =>
-        !["params", "query", "headers", "data", "error", "message"].includes(key) &&
-        (schema as any)[key] === true,
+        ![
+          "params",
+          "query",
+          "headers",
+          "data",
+          "error",
+          "message",
+          "description",
+          "summary",
+          "tags",
+        ].includes(key) && (schema as any)[key] === true,
     );
 
     const finalHandler = hasMacros
       ? async (ctx: any) => {
           for (const key of Object.keys(schema)) {
             if (
-              !["params", "query", "headers", "data", "error", "message"].includes(key) &&
+              ![
+                "params",
+                "query",
+                "headers",
+                "data",
+                "error",
+                "message",
+                "description",
+                "summary",
+                "tags",
+              ].includes(key) &&
               (schema as any)[key] === true &&
               this.macros[key]
             ) {
@@ -441,6 +463,8 @@ export default class Core<
         data: schema.data,
         error: schema.error,
         message: schema.message,
+        description: schema.description || schema.summary,
+        tags: schema.tags,
       },
     });
 
@@ -1049,7 +1073,7 @@ export default class Core<
         body instanceof Blob ||
         body instanceof FormData
       ) {
-        finalResponse = new Response(body, {
+        finalResponse = new Response(body as any, {
           status,
           headers: {
             "Content-Type": contentType || determineContentType(body),
