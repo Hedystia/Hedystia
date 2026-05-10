@@ -9,5 +9,5 @@ export default defineConfig({
   clean: true,
   unbundle: true,
   outputOptions: { exports: "named" },
-  deps: { neverBundle: ["@hedystia/validations", "@standard-schema/spec", "bun"] },
+  deps: { neverBundle: ["@hedystia/validations", "bun"] },
 });

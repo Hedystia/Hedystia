@@ -9,4 +9,7 @@ export default defineConfig({
   clean: true,
   unbundle: true,
   outputOptions: { exports: "named" },
+  deps: {
+    neverBundle: ["ws", "bun"],
+  },
 });
