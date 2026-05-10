@@ -107,7 +107,7 @@ export class Hedystia<
       });
     }
     if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
-      return new Response(data);
+      return new Response(data as any);
     }
     if (data instanceof Blob) {
       return new Response(data);
