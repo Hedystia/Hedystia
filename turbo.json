@@ -12,6 +12,10 @@
     "release:pkg": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }
