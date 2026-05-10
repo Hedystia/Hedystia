@@ -6,3 +6,4 @@ test-server.d.ts
 pkg/
 target/
 .turbo
+test-results.json

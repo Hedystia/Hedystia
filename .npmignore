@@ -6,3 +6,4 @@ src
 tsdown.config.ts
 !dist
 .turbo
+test-results.json
