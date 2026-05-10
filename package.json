@@ -36,9 +36,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "bun run --cwd Tests test",
-    "test:build": "bun run --cwd Tests build.js",
-    "test:stress": "bun run --cwd Tests stress.ts",
+    "test": "turbo run test --filter tests",
     "bump": "bumpp -r",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
