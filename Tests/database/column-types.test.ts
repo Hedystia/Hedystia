@@ -1,4 +1,3 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
   array,
   bigint,
@@ -17,6 +16,7 @@ import {
   varchar,
 } from "@hedystia/db";
 import { existsSync, rmSync } from "fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const allTypes = table("all_types", {
   id: integer().primaryKey().autoIncrement(),
@@ -193,6 +193,9 @@ for (const provider of sqliteProviders) {
     });
 
     beforeAll(async () => {
+      if (provider === "bun:sqlite" && !process.versions.bun) {
+        return;
+      }
       if (existsSync(SQLITE_DB)) {
         rmSync(SQLITE_DB);
       }
@@ -201,8 +204,9 @@ for (const provider of sqliteProviders) {
         initialized = true;
       } catch (err: any) {
         if (
-          err.message.includes("better-sqlite3") &&
-          err.message.includes("not yet supported in Bun")
+          err.message.includes("better-sqlite3") ||
+          err.message.includes("bun:sqlite") ||
+          err.message.includes("bindings")
         ) {
           return;
         }

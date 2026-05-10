@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { array, database, integer, table, varchar } from "@hedystia/db";
 import { existsSync, rmSync } from "fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const TEST_DIR = "/tmp/hedystia_test_filedb";
 

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import {
   CacheError,
   DatabaseError,
@@ -8,6 +7,7 @@ import {
   SchemaError,
   SyncError,
 } from "@hedystia/db";
+import { describe, expect, it } from "vitest";
 
 describe("Error classes", () => {
   it("should create DatabaseError", () => {

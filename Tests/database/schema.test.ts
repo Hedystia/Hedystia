@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import {
   array,
   bigint,
@@ -17,6 +16,7 @@ import {
   timestamp,
   varchar,
 } from "@hedystia/db";
+import { describe, expect, it } from "vitest";
 
 describe("Schema - Column builders", () => {
   it("should create an integer column", () => {

@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { ServeInfo } from "@hedystia/ws";
 import { createWebSocket, resolveWebSocket, serve, WebSocketClient } from "@hedystia/ws";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const PORT = 38951;
 let server: ServeInfo;

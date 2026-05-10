@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import type { ColumnMetadata, TableMetadata } from "@hedystia/db";
 import {
   compileColumnDef,
@@ -9,6 +8,7 @@ import {
   compileUpdate,
   compileWhere,
 } from "@hedystia/db";
+import { describe, expect, it } from "vitest";
 
 describe("SQL Compiler", () => {
   describe("compileColumnDef", () => {

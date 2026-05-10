@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { array, database, integer, table, text, varchar } from "@hedystia/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const users = table("hedystia_test_users", {
   id: integer().primaryKey().autoIncrement(),

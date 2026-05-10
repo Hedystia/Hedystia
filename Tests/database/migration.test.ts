@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { database, integer, migration, table, varchar } from "@hedystia/db";
 import { existsSync, rmSync } from "fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const TEST_DB = "/tmp/hedystia_test_migration.db";
 const TEST_DB_MANUAL = "/tmp/hedystia_test_migration_manual.db";

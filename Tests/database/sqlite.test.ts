@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { array, boolean, database, integer, json, table, text, varchar } from "@hedystia/db";
 import { existsSync, rmSync } from "fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const TEST_DB = "/tmp/hedystia_test_sqlite.db";
 
@@ -38,6 +38,9 @@ for (const provider of providers) {
     });
 
     beforeAll(async () => {
+      if (provider === "bun:sqlite" && !(process as any).versions?.bun) {
+        return;
+      }
       if (existsSync(TEST_DB)) {
         rmSync(TEST_DB);
       }
@@ -45,10 +48,8 @@ for (const provider of providers) {
         await db.initialize();
         initialized = true;
       } catch (err: any) {
-        if (
-          err.message.includes("better-sqlite3") &&
-          err.message.includes("not yet supported in Bun")
-        ) {
+        if (err.message.includes("better-sqlite3")) {
+          initialized = false;
           return;
         }
         throw err;

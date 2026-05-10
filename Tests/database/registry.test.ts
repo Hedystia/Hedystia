@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
 import { integer, SchemaRegistry, table, text, varchar } from "@hedystia/db";
+import { describe, expect, it } from "vitest";
 
 const users = table("users", {
   id: integer().primaryKey().autoIncrement(),
