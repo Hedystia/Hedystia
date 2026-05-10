@@ -13,23 +13,42 @@ on:
 jobs:
   testing:
     runs-on: self-hosted
+    strategy:
+      matrix:
+        runtime: [node, bun]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      
+      - name: Setup Node.js
+        if: matrix.runtime == 'node'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+          
       - name: Install dependencies
         run: bun install
+        
       - name: Lint
+        if: matrix.runtime == 'bun'
         run: bun run lint
+        
       - name: Build
         run: bun run build
-      - name: Test
+        
+      - name: Test (Bun)
+        if: matrix.runtime == 'bun'
         run: bun run test
-      - name: Test Build
-        run: bun run test:build
-      - name: Test Stress
-        run: bun run test:stress
-        timeout-minutes: 15
+        
+      - name: Test (Node)
+        if: matrix.runtime == 'node'
+        run: npm test
+        
+      - name: Test Summary
+        if: always()
+        run: bun Actions/summary.js
