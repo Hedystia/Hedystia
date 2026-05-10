@@ -10,6 +10,6 @@ export default defineConfig({
   unbundle: true,
   outputOptions: { exports: "named" },
   deps: {
-    neverBundle: ["ws", "bun"],
+    neverBundle: ["bun"],
   },
 });

@@ -1,4 +1,5 @@
-import { type WebSocket as NodeWebSocket, WebSocketServer as WSServer } from "ws";
+import { createHash } from "node:crypto";
+import type { Duplex } from "node:stream";
 
 import type {
   ServerWebSocket,
@@ -20,18 +21,289 @@ export type {
   WSMessage,
 } from "./types";
 
+// ─── RFC 6455 constants ──────────────────────────────────────────────────────
+
+const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+const OP_CONTINUATION = 0x0;
+const OP_TEXT = 0x1;
+const OP_BINARY = 0x2;
+const OP_CLOSE = 0x8;
+const OP_PING = 0x9;
+const OP_PONG = 0xa;
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
 /**
- * Runtime-agnostic WebSocket server.
+ * Compute the `Sec-WebSocket-Accept` response header per RFC 6455 §4.2.2.
+ *
+ * @param clientKey - Value of the `Sec-WebSocket-Key` request header.
+ * @returns Base-64 encoded SHA-1 digest.
+ *
+ * @internal
+ */
+function computeAccept(clientKey: string): string {
+  return createHash("sha1")
+    .update(clientKey + WS_GUID)
+    .digest("base64");
+}
+
+/**
+ * Write a single, unmasked (server-to-client) WebSocket data frame to a raw
+ * duplex socket per RFC 6455 §5.2.
+ *
+ * @param socket  - Underlying duplex transport.
+ * @param opcode  - WebSocket opcode (text, binary, close, ping, pong …).
+ * @param payload - Payload bytes to encapsulate.
+ *
+ * @internal
+ */
+function writeFrame(socket: Duplex, opcode: number, payload: Buffer): void {
+  const len = payload.length;
+  let header: Buffer;
+
+  if (len < 126) {
+    header = Buffer.allocUnsafe(2);
+    header[0] = 0x80 | opcode; // FIN=1, RSV=000, opcode
+    header[1] = len; // MASK=0, 7-bit length
+  } else if (len < 0x10000) {
+    header = Buffer.allocUnsafe(4);
+    header[0] = 0x80 | opcode;
+    header[1] = 126;
+    header.writeUInt16BE(len, 2);
+  } else {
+    // Lengths ≥ 2^16 – upper 32 bits are always 0 for reasonable payloads.
+    header = Buffer.allocUnsafe(10);
+    header[0] = 0x80 | opcode;
+    header[1] = 127;
+    header.writeUInt32BE(0, 2);
+    header.writeUInt32BE(len >>> 0, 6);
+  }
+
+  if (payload.length === 0) {
+    socket.write(header);
+  } else {
+    socket.write(Buffer.concat([header, payload]));
+  }
+}
+
+// ─── Frame parser ────────────────────────────────────────────────────────────
+
+/**
+ * Incremental, streaming RFC 6455 frame parser for masked client→server
+ * frames. Handles fragmentation, ping/pong, and close frames internally.
+ *
+ * @internal
+ */
+class FrameParser {
+  private buf: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  private fragments: Buffer[] = [];
+  private fragmentOpcode = 0;
+  private readonly maxPayload: number;
+
+  onMessage?: (data: Buffer | string, isBinary: boolean) => void;
+  onClose?: (code: number, reason: string) => void;
+  onPing?: (data: Buffer) => void;
+  onError?: (err: Error) => void;
+
+  constructor(maxPayload = 100 * 1024 * 1024) {
+    this.maxPayload = maxPayload;
+  }
+
+  /**
+   * Feed a new chunk of raw socket data into the parser.
+   *
+   * @param chunk - Incoming bytes from the transport.
+   */
+  push(chunk: Buffer): void {
+    this.buf = this.buf.length === 0 ? chunk : Buffer.concat([this.buf, chunk]);
+    this.drain();
+  }
+
+  private drain(): void {
+    for (;;) {
+      if (this.buf.length < 2) {
+        return;
+      }
+
+      const b0 = this.buf[0]!;
+      const b1 = this.buf[1]!;
+      const fin = (b0 & 0x80) !== 0;
+      const rsv = b0 & 0x70;
+      const opcode = b0 & 0x0f;
+      const masked = (b1 & 0x80) !== 0;
+      let payloadLen = b1 & 0x7f;
+      let offset = 2;
+
+      if (rsv !== 0) {
+        this.onError?.(new Error("WebSocket: RSV bits must be 0 (no extensions negotiated)"));
+        return;
+      }
+
+      if (payloadLen === 126) {
+        if (this.buf.length < 4) {
+          return;
+        }
+        payloadLen = this.buf.readUInt16BE(2);
+        offset = 4;
+      } else if (payloadLen === 127) {
+        if (this.buf.length < 10) {
+          return;
+        }
+        const hi = this.buf.readUInt32BE(2);
+        const lo = this.buf.readUInt32BE(6);
+        payloadLen = hi * 0x1_0000_0000 + lo;
+        offset = 10;
+      }
+
+      if (payloadLen > this.maxPayload) {
+        this.onError?.(
+          new Error(
+            `WebSocket: payload length ${payloadLen} exceeds maxPayload ${this.maxPayload}`,
+          ),
+        );
+        return;
+      }
+
+      const maskLen = masked ? 4 : 0;
+      const frameEnd = offset + maskLen + payloadLen;
+      if (this.buf.length < frameEnd) {
+        return;
+      }
+
+      let payload: Buffer;
+      if (masked) {
+        const mask = this.buf.subarray(offset, offset + 4);
+        payload = Buffer.allocUnsafe(payloadLen);
+        for (let i = 0; i < payloadLen; i++) {
+          payload[i] = this.buf[offset + 4 + i]! ^ mask[i & 3]!;
+        }
+      } else {
+        payload = Buffer.from(this.buf.subarray(offset, frameEnd));
+      }
+
+      this.buf = this.buf.subarray(frameEnd);
+      this.handleFrame(fin, opcode, payload);
+    }
+  }
+
+  private handleFrame(fin: boolean, opcode: number, payload: Buffer): void {
+    switch (opcode) {
+      case OP_PING:
+        this.onPing?.(payload);
+        return;
+
+      case OP_PONG:
+        return; // unsolicited pongs are silently ignored per RFC 6455
+
+      case OP_CLOSE: {
+        const code = payload.length >= 2 ? payload.readUInt16BE(0) : 1000;
+        const reason = payload.length > 2 ? payload.subarray(2).toString("utf8") : "";
+        this.onClose?.(code, reason);
+        return;
+      }
+
+      case OP_CONTINUATION:
+      case OP_TEXT:
+      case OP_BINARY:
+        if (opcode !== OP_CONTINUATION) {
+          this.fragmentOpcode = opcode;
+        }
+        this.fragments.push(payload);
+        if (fin) {
+          const full = Buffer.concat(this.fragments);
+          this.fragments = [];
+          const isBinary = this.fragmentOpcode === OP_BINARY;
+          this.onMessage?.(isBinary ? full : full.toString("utf8"), isBinary);
+        }
+        return;
+
+      default:
+        this.onError?.(new Error(`WebSocket: unknown opcode 0x${opcode.toString(16)}`));
+    }
+  }
+}
+
+// ─── NativeSocket ─────────────────────────────────────────────────────────────
+
+/**
+ * Thin wrapper around a raw `Duplex` that exposes a minimal, frame-aware
+ * WebSocket interface used internally by {@link WebSocketServer}.
+ *
+ * @internal
+ */
+class NativeSocket {
+  readonly duplex: Duplex;
+  readonly parser: FrameParser;
+
+  /** WHATWG-compatible ready-state: `1` open · `2` closing · `3` closed. */
+  readyState: 1 | 2 | 3 = 1;
+
+  constructor(duplex: Duplex, maxPayload?: number) {
+    this.duplex = duplex;
+    this.parser = new FrameParser(maxPayload);
+  }
+
+  /**
+   * Send a data frame to the peer.
+   *
+   * @param data - Payload to transmit.
+   */
+  send(data: string | Buffer | Uint8Array): void {
+    if (this.readyState !== 1) {
+      return;
+    }
+    const isBuf = Buffer.isBuffer(data);
+    const buf =
+      typeof data === "string"
+        ? Buffer.from(data, "utf8")
+        : isBuf
+          ? data
+          : Buffer.from(data as Uint8Array);
+    writeFrame(this.duplex, typeof data === "string" ? OP_TEXT : OP_BINARY, buf);
+  }
+
+  /**
+   * Initiate the close handshake.
+   *
+   * @param code   - Close status code (default `1000`).
+   * @param reason - Optional UTF-8 reason phrase.
+   */
+  close(code = 1000, reason = ""): void {
+    if (this.readyState !== 1) {
+      return;
+    }
+    this.readyState = 2;
+    const reasonBuf = Buffer.from(reason, "utf8");
+    const payload = Buffer.allocUnsafe(2 + reasonBuf.length);
+    payload.writeUInt16BE(code, 0);
+    reasonBuf.copy(payload, 2);
+    writeFrame(this.duplex, OP_CLOSE, payload);
+  }
+
+  /**
+   * Hard-terminate the underlying transport without a close handshake.
+   */
+  terminate(): void {
+    this.readyState = 3;
+    this.duplex.destroy();
+  }
+}
+
+// ─── WebSocketServer ─────────────────────────────────────────────────────────
+
+/**
+ * Runtime-agnostic WebSocket server built entirely on Node.js built-ins
+ * (`node:crypto`, `node:stream`) — no third-party dependencies.
  *
  * @remarks
- * Internally backed by the [`ws`](https://github.com/websockets/ws) package
- * which runs on Bun, Node.js and Deno (via `npm:` specifiers). The class
- * does **not** create or own an HTTP server — callers feed it raw upgrade
- * tuples coming from any HTTP runtime they prefer.
+ * The class does **not** create or own an HTTP server.  Callers feed it raw
+ * upgrade tuples coming from any HTTP runtime they prefer (Node.js `http`,
+ * Bun, Deno, Hono, Fastify's upgrade hook, etc.).
  *
- * It implements topic-based pub/sub on top of the per-connection
- * `subscribe` / `unsubscribe` / `publish` API expected by Hedystia,
- * matching the shape of `Bun.ServerWebSocket`.
+ * Topic-based pub/sub is implemented in user-space, matching the shape of
+ * `Bun.ServerWebSocket` so that the same handler code runs unchanged on
+ * every supported runtime.
  *
  * @typeParam Data - Shape of the user-attached `data` field
  *
@@ -41,8 +313,9 @@ export type {
  * import { WebSocketServer } from "@hedystia/ws/server";
  *
  * const wss = new WebSocketServer({
- *   open: (ws) => ws.send("welcome"),
+ *   open:    (ws) => ws.send("welcome"),
  *   message: (ws, msg) => ws.publish("room", msg),
+ *   close:   (ws, code) => console.log("closed", code),
  * });
  *
  * const http = createServer((_req, res) => res.end("ok"));
@@ -54,16 +327,16 @@ export type {
  */
 export class WebSocketServer<Data extends WSData = WSData> {
   private readonly handlers: WebSocketHandlers<Data>;
-  private readonly wss: WSServer;
-  private readonly topics = new Map<string, Set<NodeWebSocket>>();
-  private readonly socketTopics = new WeakMap<NodeWebSocket, Set<string>>();
-  private readonly allSockets = new Set<NodeWebSocket>();
+  private readonly maxPayload: number | undefined;
+  private readonly topics = new Map<string, Set<NativeSocket>>();
+  private readonly socketTopics = new WeakMap<NativeSocket, Set<string>>();
+  private readonly allSockets = new Set<NativeSocket>();
 
   /**
    * Build a new WebSocket server.
    *
    * @param handlers - Lifecycle handlers ({@link WebSocketHandlers})
-   * @param options - Optional behavioural overrides ({@link WebSocketServerOptions})
+   * @param options  - Optional behavioural overrides ({@link WebSocketServerOptions})
    *
    * @example
    * ```ts
@@ -75,25 +348,24 @@ export class WebSocketServer<Data extends WSData = WSData> {
    */
   constructor(handlers: WebSocketHandlers<Data>, options: WebSocketServerOptions = {}) {
     this.handlers = handlers;
-    this.wss = new WSServer({
-      noServer: true,
-      maxPayload: options.maxPayload,
-      perMessageDeflate: (options.perMessageDeflate ?? false) as any,
-    });
+    this.maxPayload = options.maxPayload;
   }
 
   /**
    * Upgrade a raw HTTP upgrade tuple to a WebSocket connection.
    *
    * @remarks
-   * The returned promise resolves to the connected {@link ServerWebSocket}
-   * once the handshake completes; rejection means the handshake failed.
+   * Performs the RFC 6455 handshake synchronously on the duplex socket,
+   * then wires up frame parsing and lifecycle handlers.  The returned
+   * promise resolves to the {@link ServerWebSocket} wrapper immediately
+   * after the handshake bytes are written; rejection means the upgrade
+   * request was missing required headers.
    *
-   * @param req - Upgrade tuple emitted by `node:http`'s `'upgrade'` event
+   * @param req     - Upgrade tuple emitted by `node:http`'s `'upgrade'` event
    * @param options - Optional initial `data` for the new connection
    * @returns Promise that resolves with the established socket wrapper
    *
-   * @throws {Error} When the underlying handshake throws synchronously
+   * @throws {Error} When `Sec-WebSocket-Key` is absent from the request headers
    *
    * @example
    * ```ts
@@ -102,7 +374,7 @@ export class WebSocketServer<Data extends WSData = WSData> {
    *     await wss.upgrade({ rawRequest: req, socket, head });
    *   } catch (err) {
    *     console.error("Upgrade failed", err);
-   *     socket.destroy();
+   *     (socket as import("net").Socket).destroy();
    *   }
    * });
    * ```
@@ -110,12 +382,39 @@ export class WebSocketServer<Data extends WSData = WSData> {
   upgrade(req: UpgradeRequest, options?: UpgradeOptions<Data>): Promise<ServerWebSocket<Data>> {
     return new Promise((resolve, reject) => {
       try {
-        this.wss.handleUpgrade(req.rawRequest, req.socket, req.head as Buffer, (socket) => {
-          const data = (options?.data ?? ({} as Data)) as Data;
-          const wrapped = this.wrap(socket, data, req.rawRequest);
-          this.bind(socket, wrapped);
-          resolve(wrapped);
-        });
+        const rawReq = req.rawRequest;
+        const duplex = req.socket as Duplex;
+
+        const clientKey = rawReq.headers?.["sec-websocket-key"] as string | undefined;
+        if (!clientKey) {
+          duplex.destroy();
+          return reject(new Error("WebSocket upgrade: missing Sec-WebSocket-Key header"));
+        }
+
+        // ── Handshake response (RFC 6455 §4.2.2) ──────────────────────────
+        const accept = computeAccept(clientKey);
+        const rawProtocol = rawReq.headers?.["sec-websocket-protocol"] as string | undefined;
+        const protocol = rawProtocol?.split(",")[0]?.trim();
+
+        let response =
+          "HTTP/1.1 101 Switching Protocols\r\n" +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n" +
+          `Sec-WebSocket-Accept: ${accept}\r\n`;
+
+        if (protocol) {
+          response += `Sec-WebSocket-Protocol: ${protocol}\r\n`;
+        }
+        response += "\r\n";
+        duplex.write(response);
+
+        // ── Wrap, bind, resolve ────────────────────────────────────────────
+        const native = new NativeSocket(duplex, this.maxPayload);
+        const data = (options?.data ?? {}) as Data;
+        const wrapped = this.wrap(native, data, rawReq);
+        this.bind(native, wrapped, req.head);
+
+        resolve(wrapped);
       } catch (err) {
         reject(err);
       }
@@ -125,9 +424,9 @@ export class WebSocketServer<Data extends WSData = WSData> {
   /**
    * Publish a message to all sockets currently subscribed to `topic`.
    *
-   * @param topic - Topic name
-   * @param message - Payload to broadcast
-   * @param _compress - Reserved for future use; ignored under the `ws` adapter
+   * @param topic      - Topic name
+   * @param message    - Payload to broadcast
+   * @param _compress  - Reserved for future use; has no effect on the native implementation
    * @returns Number of sockets that received the message.
    *
    * @example
@@ -142,9 +441,9 @@ export class WebSocketServer<Data extends WSData = WSData> {
     }
     const payload = toSendable(message);
     let count = 0;
-    for (const socket of set) {
-      if (socket.readyState === 1) {
-        socket.send(payload);
+    for (const native of set) {
+      if (native.readyState === 1) {
+        native.send(payload);
         count++;
       }
     }
@@ -154,114 +453,194 @@ export class WebSocketServer<Data extends WSData = WSData> {
   /**
    * Close the server and optionally terminate all live sockets.
    *
-   * @param closeActiveConnections - When `true`, calls `socket.terminate()`
-   *  on every live connection before shutting down.
+   * @param closeActiveConnections - When `true`, immediately terminates
+   *   every live connection before clearing internal state.
    */
   close(closeActiveConnections = false): void {
     if (closeActiveConnections) {
-      for (const socket of this.allSockets) {
+      for (const native of this.allSockets) {
         try {
-          socket.terminate();
+          native.terminate();
         } catch {
           /* ignore */
         }
       }
       this.allSockets.clear();
     }
-    this.wss.close();
+    this.topics.clear();
   }
 
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
   /**
-   * Attach the per-socket lifecycle listeners (`message`, `close`, `error`).
+   * Wire up the duplex transport listeners (`data`, `close`, `error`) and
+   * invoke the user's `open` handler.
+   *
+   * @param native  - Wrapped transport socket.
+   * @param wrapped - Public {@link ServerWebSocket} wrapper.
+   * @param head    - Buffered bytes captured by the HTTP parser (re-fed into the parser).
    *
    * @internal
    */
-  private bind(socket: NodeWebSocket, wrapped: ServerWebSocket<Data>): void {
-    this.allSockets.add(socket);
+  private bind(
+    native: NativeSocket,
+    wrapped: ServerWebSocket<Data>,
+    head: Buffer | Uint8Array,
+  ): void {
+    this.allSockets.add(native);
 
-    if (this.handlers.open) {
-      Promise.resolve(this.handlers.open(wrapped)).catch((err) =>
-        console.error("[ws] open handler error:", err),
-      );
+    // Re-feed any bytes the HTTP parser already consumed before the upgrade.
+    if (head && head.length > 0) {
+      native.parser.push(Buffer.isBuffer(head) ? head : Buffer.from(head));
     }
 
-    socket.on("message", (raw, isBinary) => {
+    // ── Parser event wiring ───────────────────────────────────────────────
+    native.parser.onMessage = (raw, isBinary) => {
       const message: WSMessage = isBinary
-        ? raw instanceof ArrayBuffer
-          ? new Uint8Array(raw)
-          : Array.isArray(raw)
-            ? Buffer.concat(raw)
-            : (raw as Buffer)
-        : raw.toString();
+        ? raw instanceof Buffer
+          ? raw
+          : Buffer.from(raw as Uint8Array)
+        : (raw as string);
       Promise.resolve(this.handlers.message(wrapped, message)).catch((err) =>
         console.error("[ws] message handler error:", err),
       );
-    });
+    };
 
-    socket.on("close", (code, reason) => {
-      const owned = this.socketTopics.get(socket);
-      if (owned) {
-        for (const topic of owned) {
-          this.topics.get(topic)?.delete(socket);
-        }
-        this.socketTopics.delete(socket);
+    native.parser.onClose = (code, reason) => {
+      // Acknowledge the close handshake if we haven't started it.
+      if (native.readyState === 1) {
+        native.close(code, reason);
       }
-      this.allSockets.delete(socket);
+      this.cleanup(native);
       if (this.handlers.close) {
-        Promise.resolve(this.handlers.close(wrapped, code, reason?.toString() ?? "")).catch((err) =>
+        Promise.resolve(this.handlers.close(wrapped, code, reason)).catch((err) =>
           console.error("[ws] close handler error:", err),
         );
       }
+    };
+
+    native.parser.onPing = (data) => {
+      // Reply with a pong carrying the same payload per RFC 6455 §5.5.3.
+      if (native.readyState === 1) {
+        writeFrame(native.duplex, OP_PONG, data);
+      }
+    };
+
+    native.parser.onError = (err) => {
+      native.terminate();
+      this.cleanup(native);
+      if (this.handlers.error) {
+        Promise.resolve(this.handlers.error(wrapped, err)).catch((e) =>
+          console.error("[ws] error handler error:", e),
+        );
+      }
+    };
+
+    // ── Duplex transport events ───────────────────────────────────────────
+    native.duplex.on("data", (chunk: Buffer) => {
+      try {
+        native.parser.push(chunk);
+      } catch (err) {
+        console.error("[ws] frame parsing error:", err);
+        native.terminate();
+        this.cleanup(native);
+      }
     });
 
-    socket.on("error", (err) => {
+    native.duplex.on("close", () => {
+      if (native.readyState !== 3) {
+        native.readyState = 3;
+        this.cleanup(native);
+        if (this.handlers.close) {
+          Promise.resolve(this.handlers.close(wrapped, 1006, "")).catch((err) =>
+            console.error("[ws] close handler error:", err),
+          );
+        }
+      }
+    });
+
+    native.duplex.on("error", (err: Error) => {
+      native.readyState = 3;
+      this.cleanup(native);
       if (this.handlers.error) {
         Promise.resolve(this.handlers.error(wrapped, err)).catch((e) =>
           console.error("[ws] error handler error:", e),
         );
       }
     });
+
+    // ── Open handler ─────────────────────────────────────────────────────
+    if (this.handlers.open) {
+      Promise.resolve(this.handlers.open(wrapped)).catch((err) =>
+        console.error("[ws] open handler error:", err),
+      );
+    }
   }
 
   /**
-   * Build the {@link ServerWebSocket} wrapper exposed to user handlers.
+   * Remove a socket from every topic it had joined and from the global
+   * tracking set.
+   *
+   * @param native - Socket being cleaned up.
    *
    * @internal
    */
-  private wrap(socket: NodeWebSocket, data: Data, rawReq: any): ServerWebSocket<Data> {
+  private cleanup(native: NativeSocket): void {
+    const owned = this.socketTopics.get(native);
+    if (owned) {
+      for (const topic of owned) {
+        this.topics.get(topic)?.delete(native);
+      }
+      this.socketTopics.delete(native);
+    }
+    this.allSockets.delete(native);
+  }
+
+  /**
+   * Build the {@link ServerWebSocket} wrapper exposed to user handlers,
+   * embedding topic-based pub/sub backed by the server's internal maps.
+   *
+   * @param native   - Wrapped transport socket.
+   * @param data     - User-supplied `data` payload attached on upgrade.
+   * @param rawReq   - Raw incoming message used to extract the remote address.
+   * @returns The fully-featured public wrapper.
+   *
+   * @internal
+   */
+  private wrap(native: NativeSocket, data: Data, rawReq: any): ServerWebSocket<Data> {
     const remoteAddress: string =
       (rawReq?.socket?.remoteAddress as string) ||
       (rawReq?.headers?.["x-forwarded-for"] as string) ||
       "";
 
-    const subscribe = (topic: string) => {
+    const subscribe = (topic: string): void => {
       let set = this.topics.get(topic);
       if (!set) {
         set = new Set();
         this.topics.set(topic, set);
       }
-      set.add(socket);
-      let owned = this.socketTopics.get(socket);
+      set.add(native);
+      let owned = this.socketTopics.get(native);
       if (!owned) {
         owned = new Set();
-        this.socketTopics.set(socket, owned);
+        this.socketTopics.set(native, owned);
       }
       owned.add(topic);
     };
 
-    const unsubscribe = (topic: string) => {
-      this.topics.get(topic)?.delete(socket);
-      this.socketTopics.get(socket)?.delete(topic);
+    const unsubscribe = (topic: string): void => {
+      this.topics.get(topic)?.delete(native);
+      this.socketTopics.get(native)?.delete(topic);
     };
 
-    const publishToPeers = (topic: string, message: WSMessage) => {
+    const publishToPeers = (topic: string, message: WSMessage): void => {
       const set = this.topics.get(topic);
       if (!set) {
         return;
       }
       const payload = toSendable(message);
       for (const peer of set) {
-        if (peer !== socket && peer.readyState === 1) {
+        if (peer !== native && peer.readyState === 1) {
           peer.send(payload);
         }
       }
@@ -270,23 +649,23 @@ export class WebSocketServer<Data extends WSData = WSData> {
     const wrapper: ServerWebSocket<Data> = {
       data,
       get readyState() {
-        return socket.readyState;
+        return native.readyState;
       },
       remoteAddress,
       send: (message, _compress) => {
         const payload = toSendable(message);
-        socket.send(payload);
+        native.send(payload);
         return typeof payload === "string"
-          ? Buffer.byteLength(payload)
+          ? Buffer.byteLength(payload as string)
           : (payload as Buffer | Uint8Array).byteLength;
       },
       close: (code, reason) => {
-        socket.close(code, reason);
+        native.close(code, reason);
       },
       subscribe,
       unsubscribe,
       publish: publishToPeers,
-      isSubscribed: (topic) => !!this.socketTopics.get(socket)?.has(topic),
+      isSubscribed: (topic) => !!this.socketTopics.get(native)?.has(topic),
       cork: (cb) => cb(wrapper),
     };
 
@@ -294,11 +673,13 @@ export class WebSocketServer<Data extends WSData = WSData> {
   }
 }
 
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
 /**
- * Coerce a {@link WSMessage} into something the `ws` package can transmit.
+ * Coerce a {@link WSMessage} into a form that {@link NativeSocket.send} accepts.
  *
- * @param message - User-supplied payload
- * @returns A `string`, `Buffer` or `Uint8Array` ready to be sent
+ * @param message - User-supplied payload.
+ * @returns A `string`, `Buffer` or `Uint8Array` ready to be framed.
  *
  * @internal
  */

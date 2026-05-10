@@ -5,11 +5,7 @@
   "homepage": "https://docs.hedystia.com/plugins/websocket",
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@types/ws": "^8.5.13",
     "typescript": "catalog:"
-  },
-  "dependencies": {
-    "ws": "^8.18.0"
   },
   "private": false,
   "keywords": [

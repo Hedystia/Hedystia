@@ -3,7 +3,7 @@
  *
  * @remarks
  * Matches the WHATWG `WebSocket.send` signature plus the `Uint8Array`
- * convenience accepted by Bun and the `ws` package.
+ * convenience accepted by Bun and the native Node.js implementation.
  */
 export type WSMessage = string | ArrayBuffer | Uint8Array;
 
@@ -21,7 +21,7 @@ export type WSData = Record<string, any>;
  *
  * @remarks
  * The interface intentionally mirrors `Bun.ServerWebSocket` so that the
- * same handler code works on Bun (native) and on Node.js (via
+ * same handler code works on Bun (native) and on Node.js / Deno (via
  * {@link WebSocketServer}). Topic-based pub/sub is implemented in
  * user-space when running outside Bun.
  *
@@ -30,7 +30,7 @@ export type WSData = Record<string, any>;
  * @example
  * ```ts
  * const handlers: WebSocketHandlers<{ user: string }> = {
- *   open: (ws) => ws.subscribe(`user:${ws.data.user}`),
+ *   open:    (ws) => ws.subscribe(`user:${ws.data.user}`),
  *   message: (ws, msg) => ws.publish(`user:${ws.data.user}`, msg),
  * };
  * ```
@@ -45,7 +45,7 @@ export interface ServerWebSocket<Data extends WSData = WSData> {
   /**
    * Send a message to this socket only.
    *
-   * @param message - Payload to send
+   * @param message  - Payload to send
    * @param compress - Whether to compress (honoured on Bun, ignored on Node)
    * @returns Number of bytes written (best-effort on Node)
    */
@@ -53,8 +53,8 @@ export interface ServerWebSocket<Data extends WSData = WSData> {
   /**
    * Close the connection.
    *
-   * @param code - Close code (defaults to 1000)
-   * @param reason - Optional human-readable reason
+   * @param code   - Close code (defaults to `1000`)
+   * @param reason - Optional human-readable reason phrase
    */
   close(code?: number, reason?: string): void;
   /**
@@ -77,8 +77,8 @@ export interface ServerWebSocket<Data extends WSData = WSData> {
    * @remarks
    * The sender is excluded by default — matching Bun's default behaviour.
    *
-   * @param topic - Topic name
-   * @param message - Payload to broadcast
+   * @param topic    - Topic name
+   * @param message  - Payload to broadcast
    * @param compress - Whether to compress (honoured on Bun, ignored on Node)
    */
   publish(topic: string, message: WSMessage, compress?: boolean): void;
@@ -105,10 +105,9 @@ export interface ServerWebSocket<Data extends WSData = WSData> {
  * Bun-style compression dictionary identifier.
  *
  * @remarks
- * Used by Bun's `perMessageDeflate` configuration. The `@hedystia/ws`
- * server forwards the value to the underlying implementation, which only
- * Bun interprets natively; Node falls back to defaults when the value is
- * not a recognised `ws` shape.
+ * Used by Bun's `perMessageDeflate` configuration. Passed through verbatim
+ * to Bun when running natively; has no effect on the pure-Node
+ * implementation shipped by `@hedystia/ws`.
  */
 export type Compressor =
   | "disable"
@@ -128,11 +127,11 @@ export type Compressor =
  *
  * @remarks
  * Accepts either a boolean (`true` enables defaults, `false` disables it)
- * or a free-form object whose shape is forwarded verbatim to the underlying
- * implementation. Bun's {@link Compressor} strings (`"3KB"`, `"shared"`, …)
- * and the [`ws`](https://github.com/websockets/ws) package's
- * `PerMessageDeflateOptions` (`zlibDeflateOptions`, `threshold`, …) are
- * both supported by simply matching whatever the runtime expects.
+ * or a free-form object. Bun's {@link Compressor} strings (`"3KB"`,
+ * `"shared"`, …) are supported when running on Bun natively.
+ *
+ * **Note:** This option has no effect on the built-in Node.js implementation
+ * — `@hedystia/ws` does not negotiate the `permessage-deflate` extension.
  */
 export type PerMessageDeflate =
   | boolean
@@ -145,9 +144,15 @@ export type PerMessageDeflate =
  * Construction options for {@link WebSocketServer}.
  */
 export interface WebSocketServerOptions {
-  /** Maximum allowed payload in bytes. Defaults to the underlying library's default. */
+  /** Maximum allowed payload in bytes. Defaults to 100 MiB. */
   maxPayload?: number;
-  /** Per-message deflate configuration. */
+  /**
+   * Per-message deflate configuration.
+   *
+   * @remarks
+   * Has no effect on the built-in Node.js implementation; reserved for
+   * future Bun-native integration.
+   */
   perMessageDeflate?: PerMessageDeflate;
 }
 
@@ -184,9 +189,9 @@ export interface ClientWebSocketOptions {
    * Custom request headers.
    *
    * @remarks
-   * Honoured on Node via the `ws` package; runtimes that ship a WHATWG
-   * `WebSocket` (Bun, Deno, browsers, Node ≥ 22) ignore them — matching
-   * standard WebSocket semantics.
+   * Only honoured on runtimes that support them via the `WebSocket`
+   * constructor (e.g. Bun). WHATWG-strict environments (browsers, Deno,
+   * Node.js ≥ 22) ignore this field — matching standard WebSocket semantics.
    */
   headers?: Record<string, string>;
 }
@@ -195,8 +200,7 @@ export interface ClientWebSocketOptions {
  * Raw upgrade tuple consumed by {@link WebSocketServer.upgrade}.
  *
  * @remarks
- * Mirrors what `node:http`'s `'upgrade'` event emits and what the `ws`
- * package's `WebSocketServer.handleUpgrade` consumes.
+ * Mirrors what `node:http`'s `'upgrade'` event emits.
  */
 export interface UpgradeRequest {
   /** Raw `IncomingMessage`-like object exposing `headers`, `method`, `url`. */
@@ -219,8 +223,8 @@ export interface UpgradeOptions<Data extends WSData = WSData> {
    * Extra response headers.
    *
    * @remarks
-   * Forwarded to the underlying handshake when supported (Bun); ignored on
-   * Node-backed upgrades, which control headers via the `ws` package.
+   * Reserved for future use; currently ignored by the native implementation.
+   * On Bun-native integration this would be forwarded to the handshake.
    */
   headers?: Record<string, string> | Headers;
 }
