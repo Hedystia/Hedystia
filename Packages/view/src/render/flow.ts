@@ -6,7 +6,7 @@
 
 import { effect } from "../jsx/element";
 import { tick } from "../scheduler";
-import { sig, onCleanup as signalOnCleanup, val } from "../signal";
+import { onCleanup as signalOnCleanup } from "../signal";
 import type { Accessor } from "../types";
 
 /**
@@ -151,7 +151,7 @@ export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children
 export function For<T>(props: {
   each: T[] | Accessor<T[]>;
   key?: (item: T) => string | number;
-  children: (item: Accessor<T>, index: Accessor<number>) => any;
+  children: (item: T, index: number) => any;
 }): any {
   // SSR mode: render all items
   if (!isBrowser) {
@@ -160,9 +160,7 @@ export function For<T>(props: {
       return "";
     }
     return items.map((item, i) => {
-      const itemAccessor = () => item;
-      const indexAccessor = () => i;
-      return props.children(itemAccessor, indexAccessor);
+      return props.children(item, i);
     });
   }
 
@@ -179,12 +177,7 @@ export function For<T>(props: {
     // Create new nodes
     for (let i = 0; i < items.length; i++) {
       const item = items[i]!;
-      const itemSig = sig(item);
-      const indexSig = sig(i);
-      const child = props.children(
-        () => val(itemSig),
-        () => val(indexSig),
-      );
+      const child = props.children(item, i);
       // Children callback can return a single node or an array
       const nodes = resolveNodes(child);
       currentNodes.push(...nodes);
@@ -202,7 +195,7 @@ export function For<T>(props: {
  */
 export function Index<T>(props: {
   each: T[] | Accessor<T[]>;
-  children: (item: Accessor<T>, index: number) => any;
+  children: (item: T, index: number) => any;
 }): any {
   // SSR mode: render all items by index
   if (!isBrowser) {
@@ -211,8 +204,7 @@ export function Index<T>(props: {
       return "";
     }
     return items.map((item, i) => {
-      const itemAccessor = () => item;
-      return props.children(itemAccessor, i);
+      return props.children(item, i);
     });
   }
 
@@ -228,8 +220,7 @@ export function Index<T>(props: {
 
     // Create new nodes
     for (let i = 0; i < items.length; i++) {
-      const itemSig = sig(items[i]!);
-      const child = props.children(() => val(itemSig), i);
+      const child = props.children(items[i]!, i);
       const nodes = resolveNodes(child);
       currentNodes.push(...nodes);
     }
