@@ -38,12 +38,7 @@ export interface SignalBase<T> {
  * - Destructuring: [val, set] = signal
  * - Traditional API: val(signal), set(signal, v)
  */
-export interface Signal<T> extends SignalBase<T> {
-  readonly 0: Accessor<T>;
-  readonly 1: Setter<T>;
-  [Symbol.iterator](): IterableIterator<Accessor<T> | Setter<T>>;
-  (): T;
-}
+export type Signal<T> = SignalBase<T> & [Accessor<T>, Setter<T>] & (() => T);
 
 /**
  * Read-only derived reactive signal computed from other signals

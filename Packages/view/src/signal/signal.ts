@@ -12,6 +12,7 @@ import type {
   Owner as OwnerType,
   ReadonlySignal,
   Signal,
+  SignalBase,
   SignalOptions,
 } from "../types";
 import { equalFn } from "../utils";
@@ -563,12 +564,4 @@ export function cleanNode(node: Computation<any> | OwnerType): void {
       cleanNode(owned[i]!);
     }
   }
-}
-
-/** @internal */
-export interface SignalBase<T> {
-  _value: T;
-  _observers: Computation<any>[] | null;
-  _observerSlots: number[] | null;
-  _comparator?: (prev: T, next: T) => boolean;
 }
