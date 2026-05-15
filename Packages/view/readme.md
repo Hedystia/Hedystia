@@ -22,15 +22,15 @@ Configure your `tsconfig.json`:
 ```
 
 ```tsx
-import { sig, val, set, mount } from "@hedystia/view";
+import { sig, mount } from "@hedystia/view";
 
 function Counter() {
-  const count = sig(0);
+  const [count, setCount] = sig(0);
 
   return (
     <div style={{ padding: "16px" }}>
-      <h1>Counter: {() => val(count)}</h1>
-      <button type="button" onClick={() => set(count, val(count) + 1)}>+</button>
+      <h1>Counter: {count}</h1>
+      <button type="button" onClick={() => setCount((c) => c + 1)}>+</button>
     </div>
   );
 }
@@ -38,26 +38,27 @@ function Counter() {
 mount(Counter, document.getElementById("root")!);
 ```
 
-> Components run **once**. Reactivity comes from wrapping signal reads in `() => ...` accessors.
+> Components run **once**. Reactivity comes from signal accessors or wrapping signal reads in `() => ...` functions.
 
 ## Signals
 
 ```tsx
 import { sig, val, set, update, memo, batch, peek, untrack } from "@hedystia/view";
 
+// Traditional API
 const count = sig(0);
+val(count); // Read
+set(count, 5); // Write
+update(count, (prev) => prev + 1); // Update
 
-// Read (tracked inside reactive contexts)
-val(count); // 0
-
-// Write
-set(count, 5);
-
-// Update from previous
-update(count, (prev) => prev + 1);
+// Destructured API (Preferred)
+const [value, setValue] = sig(0);
+value(); // Read
+setValue(5); // Write
+setValue((prev) => prev + 1); // Update
 
 // Derived / computed
-const doubled = memo(() => val(count) * 2);
+const doubled = memo(() => value() * 2);
 
 // Batch multiple updates into one reactive cycle
 batch(() => {
@@ -146,7 +147,7 @@ function App() {
 ### For (Keyed List)
 
 ```tsx
-import { sig, val, set, mount, For } from "@hedystia/view";
+import { sig, val, mount, For } from "@hedystia/view";
 
 interface Todo {
   id: number;
@@ -164,7 +165,7 @@ function TodoList() {
       <For each={() => val(todos)} key={(todo) => todo.id}>
         {(todo, index) => (
           <li>
-            {() => `${val(index) + 1}. ${val(todo).text}`}
+            {() => `${index + 1}. ${todo.text}`}
           </li>
         )}
       </For>
