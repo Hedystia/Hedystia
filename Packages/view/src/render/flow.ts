@@ -6,7 +6,7 @@
 
 import { effect } from "../jsx/element";
 import { tick } from "../scheduler";
-import { onCleanup as signalOnCleanup } from "../signal";
+import { onCleanup as signalOnCleanup, val } from "../signal";
 import type { Accessor } from "../types";
 
 /**
@@ -78,7 +78,8 @@ export function resolveNodes(content: any): Node[] {
     return [];
   }
   if (typeof content === "function") {
-    return resolveNodes(content());
+    // Use val() to unwrap and register dependencies if it's a reactive accessor
+    return resolveNodes(val(content));
   }
   if (Array.isArray(content)) {
     const result: Node[] = [];
@@ -110,7 +111,7 @@ export function resolveNodes(content: any): Node[] {
 export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children: any }): any {
   // SSR mode: evaluate condition and return appropriate content
   if (!isBrowser) {
-    const cond = typeof props.when === "function" ? (props.when as Accessor<T>)() : props.when;
+    const cond = val(props.when);
     if (cond && props.children) {
       return typeof props.children === "function" ? props.children() : props.children;
     }
@@ -124,7 +125,7 @@ export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children
   const currentNodes: Node[] = [];
 
   effect(() => {
-    const cond = typeof props.when === "function" ? (props.when as Accessor<T>)() : props.when;
+    const cond = val(props.when);
 
     removeNodes(currentNodes);
     currentNodes.length = 0;
@@ -155,7 +156,7 @@ export function For<T>(props: {
 }): any {
   // SSR mode: render all items
   if (!isBrowser) {
-    const items = typeof props.each === "function" ? (props.each as Accessor<T[]>)() : props.each;
+    const items = val(props.each);
     if (!Array.isArray(items) || items.length === 0) {
       return "";
     }
@@ -168,19 +169,21 @@ export function For<T>(props: {
   let currentNodes: Node[] = [];
 
   effect(() => {
-    const items = typeof props.each === "function" ? (props.each as Accessor<T[]>)() : props.each;
+    const items = val(props.each);
 
     // Remove old nodes
     removeNodes(currentNodes);
     currentNodes = [];
 
     // Create new nodes
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
-      const child = props.children(item, i);
-      // Children callback can return a single node or an array
-      const nodes = resolveNodes(child);
-      currentNodes.push(...nodes);
+    if (Array.isArray(items)) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]!;
+        const child = props.children(item, i);
+        // Children callback can return a single node or an array
+        const nodes = resolveNodes(child);
+        currentNodes.push(...nodes);
+      }
     }
 
     // Insert all nodes
@@ -199,7 +202,7 @@ export function Index<T>(props: {
 }): any {
   // SSR mode: render all items by index
   if (!isBrowser) {
-    const items = typeof props.each === "function" ? (props.each as Accessor<T[]>)() : props.each;
+    const items = val(props.each);
     if (!Array.isArray(items) || items.length === 0) {
       return "";
     }
@@ -212,17 +215,19 @@ export function Index<T>(props: {
   let currentNodes: Node[] = [];
 
   effect(() => {
-    const items = typeof props.each === "function" ? (props.each as Accessor<T[]>)() : props.each;
+    const items = val(props.each);
 
     // Remove old nodes
     removeNodes(currentNodes);
     currentNodes = [];
 
     // Create new nodes
-    for (let i = 0; i < items.length; i++) {
-      const child = props.children(items[i]!, i);
-      const nodes = resolveNodes(child);
-      currentNodes.push(...nodes);
+    if (Array.isArray(items)) {
+      for (let i = 0; i < items.length; i++) {
+        const child = props.children(items[i]!, i);
+        const nodes = resolveNodes(child);
+        currentNodes.push(...nodes);
+      }
     }
 
     // Insert all nodes
@@ -243,7 +248,7 @@ export function Switch(props: { fallback?: any; children: any }): any {
       for (const child of children) {
         if (child && typeof child === "object" && "_matchWhen" in child) {
           const when = (child as any)._matchWhen;
-          const condition = typeof when === "function" ? when() : when;
+          const condition = val(when);
           if (condition) {
             return (child as any)._matchChildren;
           }
@@ -264,7 +269,7 @@ export function Switch(props: { fallback?: any; children: any }): any {
       for (const child of children) {
         if (child && (child as any)._matchWhen) {
           const when = (child as any)._matchWhen;
-          const condition = typeof when === "function" ? when() : when;
+          const condition = val(when);
           if (condition) {
             matched = (child as any)._matchChildren;
             break;
@@ -298,13 +303,13 @@ export function Match<T>(props: { when: T | Accessor<T>; children: any }): any {
   // SSR mode: return marker object
   if (!isBrowser) {
     const marker: Record<string, unknown> = {};
-    marker._matchWhen = typeof props.when === "function" ? props.when : () => props.when;
+    marker._matchWhen = props.when;
     marker._matchChildren = props.children;
     return marker;
   }
 
   const marker = document.createComment("match");
-  (marker as any)._matchWhen = typeof props.when === "function" ? props.when : () => props.when;
+  (marker as any)._matchWhen = props.when;
   (marker as any)._matchChildren = props.children;
   return marker;
 }
