@@ -18,6 +18,15 @@ describe("Signals", () => {
       const obj = sig({ foo: "bar" });
       expect(val(obj)).toEqual({ foo: "bar" });
     });
+
+    it("should support destructuring [value, setValue]", () => {
+      const [count, setCount] = sig(0);
+      expect(count()).toBe(0);
+      setCount(1);
+      expect(count()).toBe(1);
+      setCount((prev: number) => prev + 1);
+      expect(count()).toBe(2);
+    });
   });
 
   describe("set()", () => {

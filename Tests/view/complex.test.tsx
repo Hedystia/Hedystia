@@ -46,12 +46,8 @@ describe("Complex View Usage", () => {
             <For each={() => val(todos)} key={(todo) => todo.id}>
               {(todo, index) => (
                 <li>
-                  <span class="todo-text">{() => `${val(index) + 1}. ${val(todo).text}`}</span>
-                  <button
-                    type="button"
-                    class="remove-todo"
-                    onClick={() => removeTodo(val(todo).id)}
-                  >
+                  <span class="todo-text">{() => `${index + 1}. ${todo.text}`}</span>
+                  <button type="button" class="remove-todo" onClick={() => removeTodo(todo.id)}>
                     ✕
                   </button>
                 </li>
@@ -195,7 +191,7 @@ describe("Complex View Usage", () => {
                   style={() => ({
                     width: "48px",
                     height: "48px",
-                    backgroundColor: val(color),
+                    backgroundColor: color,
                     borderRadius: "4px",
                   })}
                   title={`Color ${index}`}

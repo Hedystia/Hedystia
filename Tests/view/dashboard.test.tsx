@@ -50,16 +50,16 @@ describe("Dashboard Complexity Test", () => {
             <For each={() => val(widgets)} key={(w) => w.id}>
               {(widget) => (
                 <div class="widget-card">
-                  <h4>{val(widget).title}</h4>
+                  <h4>{widget.title}</h4>
                   <button
                     type="button"
                     class="toggle-widget"
-                    onClick={() => set(val(widget).expanded, !val(val(widget).expanded))}
+                    onClick={() => set(widget.expanded, !val(widget.expanded))}
                   >
-                    {() => (val(val(widget).expanded) ? "Collapse" : "Expand")}
+                    {() => (val(widget.expanded) ? "Collapse" : "Expand")}
                   </button>
-                  <Show when={() => val(val(widget).expanded)}>
-                    <p class="details">Detailed information for {val(widget).title}</p>
+                  <Show when={() => val(widget.expanded)}>
+                    <p class="details">Detailed information for {widget.title}</p>
                   </Show>
                 </div>
               )}
@@ -87,10 +87,10 @@ describe("Dashboard Complexity Test", () => {
                 <For each={() => val(groups)} key={(g) => g.name}>
                   {(group) => (
                     <div class="group-item">
-                      <h5>Group: {val(group).name}</h5>
+                      <h5>Group: {group.name}</h5>
                       <ul>
-                        <For each={() => val(val(group).users)} key={(u) => u}>
-                          {(u) => <li>{val(u)}</li>}
+                        <For each={() => val(group.users)} key={(u) => u}>
+                          {(u) => <li>{u}</li>}
                         </For>
                       </ul>
                     </div>
