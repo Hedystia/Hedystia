@@ -99,6 +99,18 @@ describe("Watch", () => {
       expect(effectValue).toBe(10);
     });
 
+    it("should support destructured signal accessor", () => {
+      const [count, setCount] = sig(0);
+      let effectValue: number | undefined;
+
+      watch(count, (value) => {
+        effectValue = value;
+      });
+
+      setCount(10);
+      expect(effectValue).toBe(10);
+    });
+
     it("should provide previous value", () => {
       const count = sig(1);
       let prev: number | undefined;
@@ -166,6 +178,20 @@ describe("Watch", () => {
 
       set(b, 20);
       expect(effectValues).toEqual([10, 20]);
+    });
+
+    it("should support destructured signal accessors in watchAll", () => {
+      const [a, setA] = sig(1);
+      const [b, _setB] = sig(2);
+      let effectValues: [any, any] | undefined;
+
+      watchAll([a, b], (values) => {
+        effectValues = values;
+      });
+
+      expect(effectValues).toEqual([1, 2]);
+      setA(10);
+      expect(effectValues).toEqual([10, 2]);
     });
 
     it("should provide previous values", () => {
