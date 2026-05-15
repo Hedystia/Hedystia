@@ -5,6 +5,7 @@
  */
 
 import type {
+  Accessor,
   Computation,
   Computed,
   EffectFunction,
@@ -34,14 +35,12 @@ export let Pending: Computation<any>[] | null = null;
  * Create a reactive signal with an initial value
  */
 export function sig<T>(initial: T, options?: SignalOptions<T>): Signal<T> {
-  const s = {
-    _value: initial,
-    _observers: null,
-    _observerSlots: null,
-    _comparator: options?.equals !== undefined ? (options.equals as any) : equalFn,
-  } as Signal<T>;
+  const s: any = () => val(s);
+  s._value = initial;
+  s._observers = null;
+  s._observerSlots = null;
+  s._comparator = options?.equals !== undefined ? (options.equals as any) : equalFn;
 
-  const getter = () => val(s);
   const setter = (v: any) => {
     if (typeof v === "function") {
       return update(s, v);
@@ -49,56 +48,85 @@ export function sig<T>(initial: T, options?: SignalOptions<T>): Signal<T> {
     return set(s, v);
   };
 
-  Object.defineProperty(s, 0, { value: getter });
+  Object.defineProperty(s, 0, { value: s });
   Object.defineProperty(s, 1, { value: setter });
   Object.defineProperty(s, Symbol.iterator, {
     value: function* () {
-      yield getter;
+      yield s;
       yield setter;
     },
   });
 
-  return s;
+  return s as Signal<T>;
 }
 
 /**
- * Read the value of a signal, registering a dependency if inside a reactive context
+ * Read the value of a signal or accessor, registering a dependency if inside a reactive context.
+ * Returns static values as-is.
  */
-export function val<T>(signal: Signal<T> | Computed<T> | (() => T)): T {
-  // Handle accessor function (used in SSR For/Index children)
-  if (typeof signal === "function" && !("_value" in signal)) {
-    return (signal as () => T)();
-  }
-  const s = signal as ReadonlySignal<T>;
-  if (Listener !== null) {
-    if (s._observers === null) {
-      s._observers = [];
-      s._observerSlots = [];
-    }
+export function val<T>(signal: Signal<T> | Computed<T> | Accessor<T> | T): T {
+  if (typeof signal === "function") {
+    if ("_value" in signal) {
+      // It's a Signal or Computed signal
+      const s = signal as ReadonlySignal<T>;
+      if (Listener !== null) {
+        if (s._observers === null) {
+          s._observers = [];
+          s._observerSlots = [];
+        }
 
-    // Check if already registered
-    let index = s._observers.indexOf(Listener);
-    if (index === -1) {
-      index = s._observers.length;
-      s._observers.push(Listener);
-      s._observerSlots!.push(Listener._sources === null ? 0 : Listener._sources.length);
+        // Check if already registered
+        let index = s._observers.indexOf(Listener);
+        if (index === -1) {
+          index = s._observers.length;
+          s._observers.push(Listener);
+          s._observerSlots!.push(Listener._sources === null ? 0 : Listener._sources.length);
 
-      if (Listener._sources === null) {
-        Listener._sources = [];
-        Listener._sourceSlots = [];
+          if (Listener._sources === null) {
+            Listener._sources = [];
+            Listener._sourceSlots = [];
+          }
+          Listener._sources.push(s);
+          Listener._sourceSlots!.push(index);
+        }
       }
-      Listener._sources.push(s);
-      Listener._sourceSlots!.push(index);
+
+      // Check if computed needs re-evaluation
+      if ("_state" in s && (s as any)._state === 1) {
+        recompute(s as any);
+      }
+
+      return s._value;
     }
+    // It's an Accessor or an arbitrary function
+    return (signal as Accessor<T>)();
   }
 
-  // Check if computed needs re-evaluation
-  const computed = s as Computed<T>;
-  if (computed._state === 1) {
-    recompute(computed);
+  // Handle object-style signal for compatibility (e.g. from stores or old code)
+  if (typeof signal === "object" && signal !== null && "_value" in signal) {
+    const s = signal as any as SignalBase<T>;
+    if (Listener !== null) {
+      if (s._observers === null) {
+        s._observers = [];
+        s._observerSlots = [];
+      }
+      let index = s._observers.indexOf(Listener);
+      if (index === -1) {
+        index = s._observers.length;
+        s._observers.push(Listener);
+        s._observerSlots!.push(Listener._sources === null ? 0 : Listener._sources.length);
+        if (Listener._sources === null) {
+          Listener._sources = [];
+          Listener._sourceSlots = [];
+        }
+        Listener._sources.push(s as any);
+        Listener._sourceSlots!.push(index);
+      }
+    }
+    return s._value;
   }
 
-  return s._value;
+  return signal as T;
 }
 
 /** @internal - Register a computation or root with the current owner */
@@ -180,14 +208,15 @@ function recompute<T>(computed: Computed<T>): void {
 /**
  * Set the value of a signal, notifying dependents
  */
-export function set<T>(signal: Signal<T>, value: T): T {
-  const comparator = signal._comparator;
-  if (comparator?.(signal._value, value)) {
+export function set<T>(signal: Signal<T> | SignalBase<T>, value: T): T {
+  const s = signal as SignalBase<T>;
+  const comparator = s._comparator;
+  if (comparator?.(s._value, value)) {
     return value;
   }
-  signal._value = value;
-  if (signal._observers !== null) {
-    scheduleUpdate(signal);
+  s._value = value;
+  if (s._observers !== null) {
+    scheduleUpdate(s);
   }
   return value;
 }
@@ -195,16 +224,17 @@ export function set<T>(signal: Signal<T>, value: T): T {
 /**
  * Update a signal's value using a function of the previous value
  */
-export function update<T>(signal: Signal<T>, fn: (prev: T) => T): T {
-  const value = fn(signal._value);
-  return set(signal, value);
+export function update<T>(signal: Signal<T> | SignalBase<T>, fn: (prev: T) => T): T {
+  const s = signal as SignalBase<T>;
+  const value = fn(s._value);
+  return set(s, value);
 }
 
 /**
  * Read a signal's value without registering a dependency
  */
-export function peek<T>(signal: Signal<T>): T {
-  return signal._value;
+export function peek<T>(signal: Signal<T> | Computed<T> | SignalBase<T>): T {
+  return (signal as SignalBase<T>)._value;
 }
 
 /** @internal - Propagate stale state through computed/memo observers */
@@ -238,7 +268,7 @@ function markDownstream(node: { _observers: Computation<any>[] | null }): void {
 }
 
 /** @internal */
-function scheduleUpdate<T>(signal: Signal<T>): void {
+function scheduleUpdate<T>(signal: SignalBase<T>): void {
   const observers = signal._observers;
   if (observers === null) {
     return;
@@ -424,11 +454,11 @@ export function memo<T>(fn: () => T): Computed<T> {
 /**
  * Execute a function without tracking signal dependencies
  */
-export function untrack<T>(fn: () => T): T {
+export function untrack<T>(fn: Accessor<T> | Signal<T> | Computed<T> | T): T {
   const prevListener = Listener;
   Listener = null;
   try {
-    return fn();
+    return val(fn);
   } finally {
     Listener = prevListener;
   }
@@ -533,4 +563,12 @@ export function cleanNode(node: Computation<any> | OwnerType): void {
       cleanNode(owned[i]!);
     }
   }
+}
+
+/** @internal */
+export interface SignalBase<T> {
+  _value: T;
+  _observers: Computation<any>[] | null;
+  _observerSlots: number[] | null;
+  _comparator?: (prev: T, next: T) => boolean;
 }
