@@ -72,7 +72,11 @@ export function patch(storeNode: any, partial: Record<string, any>): void {
       const node = storeNode[key];
       if (typeof node === "object" && node !== null && $STORE in node && !("_value" in node)) {
         patch(node, value);
-      } else if (typeof node === "object" && node !== null && "_value" in node) {
+      } else if (
+        (typeof node === "object" || typeof node === "function") &&
+        node !== null &&
+        "_value" in node
+      ) {
         setSignal(node as Signal<any>, value);
       }
     }
@@ -92,7 +96,11 @@ export function reset(storeInstance: any, initial: Record<string, StoreValue>): 
       const node = storeInstance[key];
       if (typeof node === "object" && node !== null && $STORE in node && !("_value" in node)) {
         reset(node, value as Record<string, StoreValue>);
-      } else if (typeof node === "object" && node !== null && "_value" in node) {
+      } else if (
+        (typeof node === "object" || typeof node === "function") &&
+        node !== null &&
+        "_value" in node
+      ) {
         setSignal(node as Signal<any>, value);
       }
     }
@@ -112,7 +120,11 @@ export function snap(storeNode: any): any {
     const value = storeNode[key];
     if (typeof value === "object" && value !== null && $STORE in value && !("_value" in value)) {
       result[key] = snap(value);
-    } else if (typeof value === "object" && value !== null && "_value" in value) {
+    } else if (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "_value" in value
+    ) {
       result[key] = val(value as Signal<any>);
     } else {
       result[key] = value;
