@@ -16,6 +16,8 @@ jobs:
     strategy:
       matrix:
         runtime: [node, bun]
+    env:
+      CI: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
