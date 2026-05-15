@@ -9,6 +9,7 @@ import type {
   Computed,
   EffectFunction,
   Owner as OwnerType,
+  ReadonlySignal,
   Signal,
   SignalOptions,
 } from "../types";
@@ -33,12 +34,30 @@ export let Pending: Computation<any>[] | null = null;
  * Create a reactive signal with an initial value
  */
 export function sig<T>(initial: T, options?: SignalOptions<T>): Signal<T> {
-  const s: Signal<T> = {
+  const s = {
     _value: initial,
     _observers: null,
     _observerSlots: null,
     _comparator: options?.equals !== undefined ? (options.equals as any) : equalFn,
+  } as Signal<T>;
+
+  const getter = () => val(s);
+  const setter = (v: any) => {
+    if (typeof v === "function") {
+      return update(s, v);
+    }
+    return set(s, v);
   };
+
+  Object.defineProperty(s, 0, { value: getter });
+  Object.defineProperty(s, 1, { value: setter });
+  Object.defineProperty(s, Symbol.iterator, {
+    value: function* () {
+      yield getter;
+      yield setter;
+    },
+  });
+
   return s;
 }
 
@@ -50,35 +69,36 @@ export function val<T>(signal: Signal<T> | Computed<T> | (() => T)): T {
   if (typeof signal === "function" && !("_value" in signal)) {
     return (signal as () => T)();
   }
+  const s = signal as ReadonlySignal<T>;
   if (Listener !== null) {
-    if (signal._observers === null) {
-      signal._observers = [];
-      signal._observerSlots = [];
+    if (s._observers === null) {
+      s._observers = [];
+      s._observerSlots = [];
     }
 
     // Check if already registered
-    let index = signal._observers.indexOf(Listener);
+    let index = s._observers.indexOf(Listener);
     if (index === -1) {
-      index = signal._observers.length;
-      signal._observers.push(Listener);
-      signal._observerSlots!.push(Listener._sources === null ? 0 : Listener._sources.length);
+      index = s._observers.length;
+      s._observers.push(Listener);
+      s._observerSlots!.push(Listener._sources === null ? 0 : Listener._sources.length);
 
       if (Listener._sources === null) {
         Listener._sources = [];
         Listener._sourceSlots = [];
       }
-      Listener._sources.push(signal);
+      Listener._sources.push(s);
       Listener._sourceSlots!.push(index);
     }
   }
 
   // Check if computed needs re-evaluation
-  const computed = signal as Computed<T>;
+  const computed = s as Computed<T>;
   if (computed._state === 1) {
     recompute(computed);
   }
 
-  return signal._value;
+  return s._value;
 }
 
 /** @internal - Register a computation or root with the current owner */
@@ -96,7 +116,7 @@ export function adopt(node: Computation<any> | OwnerType): void {
 export function cleanupSources(computation: Computation<any>): void {
   if (computation._sources !== null) {
     for (let j = computation._sources.length - 1; j >= 0; j--) {
-      const source: Signal<any> = computation._sources[j]!;
+      const source: ReadonlySignal<any> = computation._sources[j]!;
       const index = computation._sourceSlots![j]!;
       const obs = source._observers;
       const obsSlots: number[] | null = source._observerSlots;
