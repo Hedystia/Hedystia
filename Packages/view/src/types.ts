@@ -18,9 +18,9 @@ export interface Setter<T> {
 }
 
 /**
- * Mutable reactive signal holding a value of type T
+ * Base reactive signal properties
  */
-export interface Signal<T> {
+export interface SignalBase<T> {
   /** @internal */
   _value: T;
   /** @internal */
@@ -32,23 +32,21 @@ export interface Signal<T> {
 }
 
 /**
+ * Mutable reactive signal holding a value of type T
+ * Intersects with a tuple to support [value, setValue] destructuring with perfect types
+ */
+export type Signal<T> = SignalBase<T> & [Accessor<T>, Setter<T>];
+
+/**
  * Read-only derived reactive signal computed from other signals
  */
-export interface Computed<T> {
-  /** @internal */
-  _value: T;
+export interface Computed<T> extends SignalBase<T> {
   /** @internal */
   _fn: () => T;
   /** @internal */
-  _observers: Computation<any>[] | null;
-  /** @internal */
-  _observerSlots: number[] | null;
-  /** @internal */
-  _sources: Signal<any>[] | null;
+  _sources: ReadonlySignal<any>[] | null;
   /** @internal */
   _sourceSlots: number[] | null;
-  /** @internal */
-  _comparator?: (prev: T, next: T) => boolean;
   /** @internal */
   _state: 0 | 1 | 2;
   /** Call to get the current value */
@@ -69,7 +67,7 @@ export interface Computation<T> {
   /** @internal */
   _value: T | undefined;
   /** @internal */
-  _sources: Signal<any>[] | null;
+  _sources: ReadonlySignal<any>[] | null;
   /** @internal */
   _sourceSlots: number[] | null;
   /** @internal */
