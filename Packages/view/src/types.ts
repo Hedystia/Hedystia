@@ -33,9 +33,17 @@ export interface SignalBase<T> {
 
 /**
  * Mutable reactive signal holding a value of type T
- * Intersects with a tuple to support [value, setValue] destructuring with perfect types
+ * Supports:
+ * - Calling directly: signal() -> val(signal)
+ * - Destructuring: [val, set] = signal
+ * - Traditional API: val(signal), set(signal, v)
  */
-export type Signal<T> = SignalBase<T> & [Accessor<T>, Setter<T>];
+export interface Signal<T> extends SignalBase<T> {
+  readonly 0: Accessor<T>;
+  readonly 1: Setter<T>;
+  [Symbol.iterator](): IterableIterator<Accessor<T> | Setter<T>>;
+  (): T;
+}
 
 /**
  * Read-only derived reactive signal computed from other signals
@@ -154,7 +162,7 @@ export type FlowComponent<P extends Record<string, any> = {}, C = JSX.Children> 
 export interface Context<T> {
   _id: symbol;
   _defaultValue: T | undefined;
-  Provider: Component<{ value: T | Accessor<T>; children: JSX.Element }>;
+  Provider: Component<{ value: T | Accessor<T> | ReadonlySignal<T>; children: JSX.Element }>;
 }
 
 /**
