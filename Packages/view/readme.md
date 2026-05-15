@@ -47,7 +47,8 @@ import { sig, val, set, update, memo, batch, peek, untrack } from "@hedystia/vie
 
 // Traditional API
 const count = sig(0);
-val(count); // Read
+count();    // Read (now callable directly!)
+val(count); // Read (tracked)
 set(count, 5); // Write
 update(count, (prev) => prev + 1); // Update
 
@@ -56,6 +57,11 @@ const [value, setValue] = sig(0);
 value(); // Read
 setValue(5); // Write
 setValue((prev) => prev + 1); // Update
+
+// Universal val()
+val(5);       // 5
+val(value);   // 0
+val(() => 1); // 1
 
 // Derived / computed
 const doubled = memo(() => value() * 2);
@@ -117,27 +123,25 @@ function App() {
 ### Show (Conditional Rendering)
 
 ```tsx
-import { sig, val, set, mount, Show } from "@hedystia/view";
+import { sig, mount, Show } from "@hedystia/view";
 
 function App() {
-  const loggedIn = sig(false);
+  const [loggedIn, setLoggedIn] = sig(false);
 
   return (
     <div>
-      <button type="button" onClick={() => set(loggedIn, !val(loggedIn))}>
-        {() => val(loggedIn) ? "Log out" : "Log in"}
+      <button type="button" onClick={() => setLoggedIn(!loggedIn())}>
+        {() => loggedIn() ? "Log out" : "Log in"}
       </button>
 
       <Show
-        when={() => val(loggedIn)}
+        when={loggedIn}
         fallback={<p>Please log in to continue.</p>}
       >
-        {() => (
-          <div>
-            <h2>Welcome back!</h2>
-            <p>You are logged in.</p>
-          </div>
-        )}
+        <div>
+          <h2>Welcome back!</h2>
+          <p>You are logged in.</p>
+        </div>
       </Show>
     </div>
   );
@@ -155,14 +159,14 @@ interface Todo {
 }
 
 function TodoList() {
-  const todos = sig<Todo[]>([
+  const [todos, setTodos] = sig<Todo[]>([
     { id: 1, text: "Learn signals" },
     { id: 2, text: "Build an app" },
   ]);
 
   return (
     <ul>
-      <For each={() => val(todos)} key={(todo) => todo.id}>
+      <For each={todos} key={(todo) => todo.id}>
         {(todo, index) => (
           <li>
             {() => `${index + 1}. ${todo.text}`}
@@ -177,17 +181,17 @@ function TodoList() {
 ### Switch / Match (Multiple Branching)
 
 ```tsx
-import { sig, val, set, mount, Switch, Match } from "@hedystia/view";
+import { sig, mount, Switch, Match } from "@hedystia/view";
 
 function StatusView() {
-  const status = sig("loading");
+  const [status, setStatus] = sig("loading");
 
   return (
     <Switch fallback={<p>Unknown state</p>}>
-      <Match when={() => val(status) === "loading"}>
+      <Match when={() => status() === "loading"}>
         <p>Loading data...</p>
       </Match>
-      <Match when={() => val(status) === "success"}>
+      <Match when={() => status() === "success"}>
         {() => <SuccessContent />}
       </Match>
     </Switch>
@@ -216,30 +220,28 @@ function Modal() {
 Context provides a way to share data through the component tree without passing props manually.
 
 ```tsx
-import { ctx, use, sig, val, mount } from "@hedystia/view";
+import { ctx, use, sig, mount } from "@hedystia/view";
 
 const ThemeCtx = ctx("light");
 
 function App() {
-  const theme = sig("dark");
+  const [theme, setTheme] = sig("dark");
 
   return (
-    <ThemeCtx.Provider value={() => val(theme)}>
-      {() => (
-        <div class="app">
-          <button type="button" onClick={() => set(theme, val(theme) === "dark" ? "light" : "dark")}>
-            Toggle Theme
-          </button>
-          <ThemeDisplay />
-        </div>
-      )}
+    <ThemeCtx.Provider value={theme}>
+      <div>
+        <button type="button" onClick={() => setTheme(theme() === "dark" ? "light" : "dark")}>
+          Toggle Theme
+        </button>
+        <ThemeDisplay />
+      </div>
     </ThemeCtx.Provider>
   );
 }
 
 function ThemeDisplay() {
   const currentTheme = use(ThemeCtx);
-  return <div>Current theme is: {() => currentTheme}</div>;
+  return <div>Current theme is: {currentTheme}</div>;
 }
 ```
 
@@ -248,7 +250,7 @@ function ThemeDisplay() {
 Nested reactive state with fine-grained updates:
 
 ```tsx
-import { store, val, set, patch, snap, reset } from "@hedystia/view";
+import { store, val, set, patch } from "@hedystia/view";
 
 const app = store({
   user: { name: "guest", role: "viewer" },
@@ -274,17 +276,17 @@ function Profile() {
 ```tsx
 import { effect, on, watch } from "@hedystia/view";
 
-// Run a side effect whenever dependencies change
+// Run a side effect whenever dependencies change (eager)
 effect(() => {
-  console.log("Count is now:", val(count));
+  console.log("Count is now:", count());
 });
 
-// Run with access to previous value
-on(() => val(count), (current, prev) => {
+// Run with access to previous value (untracked callback)
+on(count, (current, prev) => {
   console.log(`Changed from ${prev} to ${current}`);
 });
 
-// Watch a signal directly
+// Watch a signal or accessor directly
 watch(count, (val) => {
   console.log("Updated:", val);
 });
