@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/db",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "Next-gen TypeScript ORM for building type-safe database layers at lightspeed",
   "homepage": "https://docs.hedystia.com",
   "devDependencies": {
