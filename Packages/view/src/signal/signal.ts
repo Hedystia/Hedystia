@@ -515,6 +515,9 @@ export function onCleanup(fn: () => void): void {
 
 /** @internal */
 export function cleanNode(node: Computation<any> | OwnerType): void {
+  if ("_sources" in node) {
+    cleanupSources(node as Computation<any>);
+  }
   if ("_cleanups" in node && node._cleanups !== null) {
     const cleanups = node._cleanups;
     node._cleanups = null;
