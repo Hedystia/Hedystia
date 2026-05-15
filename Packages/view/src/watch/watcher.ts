@@ -5,7 +5,11 @@
  */
 
 import { adopt, cleanupSources, Owner, runComputation, untrack, val } from "../signal";
-import type { Computation, ReadonlySignal } from "../types";
+import type { Accessor, Computation, ReadonlySignal } from "../types";
+
+/** @internal */
+type SignalValue<S> =
+  S extends ReadonlySignal<infer T> ? T : S extends Accessor<infer T> ? T : never;
 
 /**
  * Create a reactive effect that runs when dependencies change
@@ -87,31 +91,31 @@ export function once<T>(track: () => T, run: (value: T) => void): () => void {
 }
 
 /**
- * Concise reactive effect — pass a signal directly instead of a track function.
+ * Concise reactive effect — pass a signal or accessor directly instead of a track function.
  *
  * ```ts
  * watch(count, (value, prev) => console.log(value, prev));
  * ```
  */
-export function watch<T>(
-  signal: ReadonlySignal<T>,
-  run: (value: T, prev: T) => any | (() => void),
+export function watch<S extends ReadonlySignal<any> | Accessor<any>>(
+  signal: S,
+  run: (value: SignalValue<S>, prev: SignalValue<S>) => any | (() => void),
 ): () => void {
   return on(() => val(signal), run);
 }
 
 /**
- * Reactive effect that tracks multiple signals at once.
+ * Reactive effect that tracks multiple signals or accessors at once.
  *
  * ```ts
  * watchAll([a, b], ([aVal, bVal], [prevA, prevB]) => { });
  * ```
  */
-export function watchAll<T extends readonly ReadonlySignal<any>[]>(
+export function watchAll<T extends readonly any[]>(
   signals: [...T],
   run: (
-    values: { [K in keyof T]: T[K] extends ReadonlySignal<infer V> ? V : never },
-    prev: { [K in keyof T]: T[K] extends ReadonlySignal<infer V> ? V : never },
+    values: { [K in keyof T]: SignalValue<T[K]> },
+    prev: { [K in keyof T]: SignalValue<T[K]> },
   ) => any | (() => void),
 ): () => void {
   return on(() => signals.map((s) => val(s)) as any, run as any);

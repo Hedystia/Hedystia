@@ -60,10 +60,10 @@ export function load<T, K>(key: Accessor<K>, fetcher: (key: K) => Promise<T>): R
   });
 
   const resource: Resource<T> = {
-    state: stateSig,
-    loading: loadingSig,
-    error: errorSig,
-    data: dataSig,
+    state: stateSig[0],
+    loading: loadingSig[0],
+    error: errorSig[0],
+    data: dataSig[0],
     get ready() {
       return val(stateSig) === "ready";
     },
@@ -99,9 +99,9 @@ export function action<T, A>(fn: (args: A) => Promise<T>): Action<T, A> {
 
   const actionFn: Action<T, A> = {
     run,
-    loading: loadingSig,
-    error: errorSig,
-    data: dataSig,
+    loading: loadingSig[0],
+    error: errorSig[0],
+    data: dataSig[0],
   } as Action<T, A>;
 
   return actionFn;
