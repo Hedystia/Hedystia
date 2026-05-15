@@ -181,10 +181,10 @@ export type ResourceState<T> =
  */
 export interface Resource<T> {
   (): T | undefined;
-  readonly state: Signal<"unresolved" | "pending" | "ready" | "refreshing" | "errored">;
-  readonly loading: Signal<boolean>;
-  readonly error: Signal<Error | undefined>;
-  readonly data: Signal<T | undefined>;
+  readonly state: Accessor<"unresolved" | "pending" | "ready" | "refreshing" | "errored">;
+  readonly loading: Accessor<boolean>;
+  readonly error: Accessor<Error | undefined>;
+  readonly data: Accessor<T | undefined>;
   readonly ready: boolean;
 }
 
@@ -194,9 +194,9 @@ export interface Resource<T> {
 export interface Action<T, A> {
   (args: A): Promise<T>;
   run: (args: A) => Promise<T>;
-  readonly loading: Signal<boolean>;
-  readonly error: Signal<Error | undefined>;
-  readonly data: Signal<T | undefined>;
+  readonly loading: Accessor<boolean>;
+  readonly error: Accessor<Error | undefined>;
+  readonly data: Accessor<T | undefined>;
 }
 
 /**
