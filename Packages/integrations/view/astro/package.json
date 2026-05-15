@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/astro",
-  "version": "2.3.6",
+  "version": "2.3.7",
   "description": "Use @hedystia/view components within Astro",
   "homepage": "https://docs.hedystia.com",
   "private": false,
