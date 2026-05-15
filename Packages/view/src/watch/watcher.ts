@@ -8,15 +8,18 @@ import { adopt, cleanupSources, Owner, runComputation, untrack, val } from "../s
 import type { Accessor, Computation, ReadonlySignal } from "../types";
 
 /** @internal */
-type SignalValue<S> =
-  S extends ReadonlySignal<infer T> ? T : S extends Accessor<infer T> ? T : never;
+type SignalValue<S> = S extends ReadonlySignal<infer T> ? T : S extends Accessor<infer T> ? T : S;
 
 /**
- * Create a reactive effect that runs when dependencies change
+ * Create a reactive effect that runs when dependencies change.
+ * Accepts a track function, a signal, or a static value.
  */
-export function on<T>(track: () => T, run: (value: T, prev: T) => any | (() => void)): () => void {
+export function on<S>(
+  track: S,
+  run: (value: SignalValue<S>, prev: SignalValue<S>) => any | (() => void),
+): () => void {
   let cleanup: (() => void) | undefined;
-  let prevValue: T | undefined;
+  let prevValue: SignalValue<S> | undefined;
   let hasRun = false;
   let stopped = false;
 
@@ -26,8 +29,8 @@ export function on<T>(track: () => T, run: (value: T, prev: T) => any | (() => v
         return undefined;
       }
 
-      // Track dependencies from the track function
-      const value = track();
+      // Track dependencies from the track function/signal
+      const value = val(track as any);
 
       // Run callback untracked so reads inside run() don't become dependencies
       untrack(() => {
@@ -78,9 +81,9 @@ export function on<T>(track: () => T, run: (value: T, prev: T) => any | (() => v
 }
 
 /**
- * Create a one-time effect that runs once and disposes
+ * Create a one-time effect that runs once and disposes.
  */
-export function once<T>(track: () => T, run: (value: T) => void): () => void {
+export function once<S>(track: S, run: (value: SignalValue<S>) => void): () => void {
   let hasRun = false;
   return on(track, (value) => {
     if (!hasRun) {
@@ -101,7 +104,7 @@ export function watch<S extends ReadonlySignal<any> | Accessor<any>>(
   signal: S,
   run: (value: SignalValue<S>, prev: SignalValue<S>) => any | (() => void),
 ): () => void {
-  return on(() => val(signal), run);
+  return on(signal, run);
 }
 
 /**
