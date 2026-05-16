@@ -171,6 +171,17 @@ function renderElement(element: unknown): string {
     const attrs: string[] = [];
     let innerHTML = "";
 
+    const classSet = new Set<string>();
+    const normalizeClass = (v: any): string => {
+      if (Array.isArray(v)) {
+        return v
+          .map((i) => (typeof i === "function" ? i() : i))
+          .filter(Boolean)
+          .join(" ");
+      }
+      return String(typeof v === "function" ? v() : (v ?? ""));
+    };
+
     for (const [key, value] of Object.entries(props || {})) {
       if (key === "children") {
         if (typeof value === "string") {
@@ -184,6 +195,24 @@ function renderElement(element: unknown): string {
       }
       if (key === "dangerouslySetInnerHTML") {
         innerHTML = value?.__html || "";
+        continue;
+      }
+      if (key === "class" || key === "className") {
+        const classes = normalizeClass(value);
+        for (const c of classes.split(" ")) {
+          if (c) {
+            classSet.add(c);
+          }
+        }
+        continue;
+      }
+      if (key === "classList" && typeof value === "object" && value !== null) {
+        for (const [c, cond] of Object.entries(value)) {
+          const isTrue = typeof cond === "function" ? (cond as any)() : cond;
+          if (isTrue) {
+            classSet.add(c);
+          }
+        }
         continue;
       }
       if (key === "innerHTML") {
@@ -209,6 +238,10 @@ function renderElement(element: unknown): string {
       } else {
         attrs.push(`${attrName}="${escapeHtml(serialized)}"`);
       }
+    }
+
+    if (classSet.size > 0) {
+      attrs.push(`class="${escapeHtml(Array.from(classSet).join(" "))}"`);
     }
 
     const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
