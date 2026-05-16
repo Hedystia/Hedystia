@@ -92,6 +92,12 @@ function App() {
       <span>{() => val(count)}</span>
       <span>Doubled: {() => val(doubled)}</span>
 
+      {/* Reactive class — pass a function, signal, or array */}
+      <div class={["base", active, () => "reactive"]} />
+
+      {/* Reactive classList — object with boolean values (static or reactive) */}
+      <div classList={{ active: isActive, "is-loading": loading }} />
+
       {/* Reactive style — pass a function */}
       <div style={() => ({ color: val(count) > 5 ? "red" : "blue" })}>
         Dynamic color
