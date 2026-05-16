@@ -8,7 +8,7 @@
 import type { JSX } from "../jsx.d";
 import { flushPending } from "../render/flow";
 import { tick } from "../scheduler";
-import { adopt, Owner, runComputation } from "../signal";
+import { adopt, Owner, runComputation, val } from "../signal";
 import type { Accessor, Computation } from "../types";
 
 /**
@@ -346,13 +346,38 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
     } else if (typeof value === "function") {
       applyReactiveStyle(el, value);
     }
+  } else if (key === "classList" && typeof value === "object" && value !== null) {
+    for (const className in value) {
+      const condition = value[className];
+      if (typeof condition === "function") {
+        effect(() => {
+          const isTrue = val(condition);
+          element.classList.toggle(className, !!isTrue);
+        });
+      } else {
+        element.classList.toggle(className, !!condition);
+      }
+    }
   } else if (key === "class" || key === "className") {
-    if (typeof value === "function") {
+    const normalize = (v: any) => {
+      if (Array.isArray(v)) {
+        return v
+          .map((i) => (typeof i === "function" ? val(i) : i))
+          .filter(Boolean)
+          .join(" ");
+      }
+      return String(v ?? "");
+    };
+
+    if (
+      typeof value === "function" ||
+      (Array.isArray(value) && value.some((i) => typeof i === "function"))
+    ) {
       effect(() => {
-        element.setAttribute("class", String(value()));
+        element.setAttribute("class", normalize(typeof value === "function" ? value() : value));
       });
     } else {
-      element.setAttribute("class", String(value));
+      element.setAttribute("class", normalize(value));
     }
   } else if (key === "innerHTML" || key === "innerText" || key === "textContent") {
     const el = element as HTMLElement;
