@@ -220,8 +220,9 @@ export namespace JSX {
   // Base HTML Attributes
   export interface HTMLAttributes {
     accesskey?: Reactive<string>;
-    class?: Reactive<string>;
-    className?: Reactive<string>;
+    class?: Reactive<string | (string | Accessor<string | boolean | undefined | null>)[]>;
+    className?: Reactive<string | (string | Accessor<string | boolean | undefined | null>)[]>;
+    classList?: Record<string, Reactive<boolean | undefined | null>>;
     contenteditable?: Reactive<boolean | "true" | "false" | "plaintext-only">;
     contextmenu?: Reactive<string>;
     dir?: Reactive<"ltr" | "rtl" | "auto">;
