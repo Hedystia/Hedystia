@@ -1,0 +1,23 @@
+packages:
+  - "./Packages/adapter"
+  - "./Packages/types"
+  - "./Packages/server"
+  - "./Packages/client"
+  - "./Packages/websocket"
+  - "./Packages/swagger"
+  - "./Packages/validations"
+  - "./Packages/database"
+  - "./Packages/view"
+  - "./Packages/integrations/view/astro"
+  - "./Packages/integrations/database/better-auth"
+  - "./Tests"
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+  sqlite3: true
+
+catalog:
+  "@types/bun": ^1.3.11
+  typescript: 6.0.2
