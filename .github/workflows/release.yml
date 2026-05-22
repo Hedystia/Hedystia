@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   release:
     runs-on: self-hosted
@@ -16,28 +20,28 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
         with:
-          bun-version-file: package.json
-      - name: Setup NPM Auth
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          version: 11
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
       - name: Copy License to Packages
         run: |
           for dir in Packages/*/; do
             cp LICENSE "$dir"
           done
-      - name: Remove bun.lock
-        run: rm bun.lock
       - name: Install dependencies
-        run: bun install
+        run: pnpm install
       - name: Build
-        run: bun run build
+        run: pnpm run build
       - name: Publish
-        run: bun run release
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
+        run: pnpm run release
       - name: Generate Changelog
-        run: bunx changelogithub
+        run: pnpm dlx changelogithub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
