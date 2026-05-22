@@ -13,9 +13,6 @@ on:
 jobs:
   testing:
     runs-on: self-hosted
-    strategy:
-      matrix:
-        runtime: [node, bun]
     env:
       CI: true
     steps:
@@ -24,7 +21,6 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
       - name: Setup Node.js
-        if: matrix.runtime == 'node'
         uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -35,15 +31,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install
       - name: Lint
-        if: matrix.runtime == 'bun'
         run: pnpm run lint
       - name: Build
         run: pnpm run build
       - name: Test (Bun)
-        if: matrix.runtime == 'bun'
         run: bun run test
       - name: Test (Node)
-        if: matrix.runtime == 'node'
         run: npm test
       - name: Test Summary
         if: always()
