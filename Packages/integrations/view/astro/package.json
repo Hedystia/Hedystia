@@ -36,7 +36,7 @@
   },
   "scripts": {
     "build": "tsdown --config-loader unrun",
-    "release:pkg": "bun publish --provenance --access public",
+    "release:pkg": "npm publish --provenance --access public",
     "dev": "tsdown --watch"
   },
   "devDependencies": {
