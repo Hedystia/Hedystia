@@ -36,7 +36,6 @@
   },
   "scripts": {
     "build": "tsdown --config-loader unrun",
-    "release:pkg": "pnpm publish --no-git-checks --provenance --access public",
     "dev": "tsdown --watch"
   },
   "devDependencies": {

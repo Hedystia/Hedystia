@@ -33,8 +33,7 @@
     "test": "turbo run test --filter tests",
     "bump": "bumpp -r",
     "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "release": "turbo run release:pkg"
+    "lint:fix": "biome check --write ."
   },
   "repository": {
     "type": "git",

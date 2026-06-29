@@ -37,10 +37,17 @@ jobs:
         run: pnpm install
       - name: Build
         run: pnpm run build
-      - name: Publish
-        run: pnpm run release
+      - name: Publish Packages
+        run: |
+          for dir in Packages/*/ Packages/integrations/*/*/; do
+            if [ -f "$dir/package.json" ]; then
+              cd "$dir"
+              pnpm publish --no-git-checks --provenance --access public
+            fi
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Generate Changelog
         run: pnpm dlx changelogithub
         env:
