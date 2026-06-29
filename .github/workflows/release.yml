@@ -39,6 +39,8 @@ jobs:
         run: pnpm run build
       - name: Publish
         run: pnpm run release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Generate Changelog
         run: pnpm dlx changelogithub
         env:
