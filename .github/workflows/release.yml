@@ -43,7 +43,7 @@ jobs:
           for dir in Packages/*/ Packages/integrations/*/*/; do
             if [ -f "$dir/package.json" ]; then
               cd "$ROOT/$dir"
-              npm publish --provenance --access public
+              pnpm publish --no-git-checks --provenance --access public
               cd "$ROOT"
             fi
           done
