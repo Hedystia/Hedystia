@@ -12,7 +12,7 @@ on:
 
 jobs:
   testing:
-    runs-on: self-hosted
+    runs-on: github-hosted
     env:
       CI: true
     steps:

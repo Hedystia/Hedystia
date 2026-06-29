@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: self-hosted
+    runs-on: github-hosted
     permissions:
       id-token: write
       contents: write
