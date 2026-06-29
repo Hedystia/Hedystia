@@ -113,16 +113,10 @@ export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children
   if (!isBrowser) {
     const cond = val(props.when);
     if (cond && props.children) {
-      const result = typeof props.children === "function" ? props.children() : props.children;
-      if (result !== null && result !== undefined && result !== false) {
-        return result;
-      }
+      return typeof props.children === "function" ? props.children() : props.children;
     }
     if (props.fallback) {
-      const result = typeof props.fallback === "function" ? props.fallback() : props.fallback;
-      if (result !== null && result !== undefined && result !== false) {
-        return result;
-      }
+      return typeof props.fallback === "function" ? props.fallback() : props.fallback;
     }
     return "";
   }
@@ -166,11 +160,9 @@ export function For<T>(props: {
     if (!Array.isArray(items) || items.length === 0) {
       return "";
     }
-    // Filter out null/undefined results from children
-    const results = items
-      .map((item, i) => props.children(item, i))
-      .filter((item) => item !== null && item !== undefined && item !== false);
-    return results;
+    return items.map((item, i) => {
+      return props.children(item, i);
+    });
   }
 
   const container = document.createComment("for");

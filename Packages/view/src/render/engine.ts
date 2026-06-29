@@ -145,10 +145,7 @@ function renderElement(element: unknown): string {
   }
   // Handle arrays (fragments)
   if (Array.isArray(element)) {
-    return element
-      .map((child) => renderElement(child))
-      .filter((s) => s !== "")
-      .join("");
+    return element.map((child) => renderElement(child)).join("");
   }
   // Handle DOM elements (browser)
   if (typeof HTMLElement !== "undefined" && element instanceof HTMLElement) {

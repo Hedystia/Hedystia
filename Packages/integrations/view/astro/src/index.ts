@@ -47,7 +47,7 @@ export default function (options: Options = {}): AstroIntegration {
 }
 
 function injectCSSIntoHTML(dir: string, css: string): void {
-  const styleTag = `<style data-hedystia-css">${css.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</style>`;
+  const styleTag = `<style data-hedystia-css>${css}</style>`;
 
   for (const file of findHTMLFiles(dir)) {
     let content = fs.readFileSync(file, "utf-8");
