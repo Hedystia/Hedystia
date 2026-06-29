@@ -12,7 +12,7 @@ on:
 
 jobs:
   testing:
-    runs-on: ubuntu
+    runs-on: ubuntu-latest
     env:
       CI: true
     steps:
