@@ -39,15 +39,16 @@ jobs:
         run: pnpm run build
       - name: Publish Packages
         run: |
+          ROOT=$(pwd)
           for dir in Packages/*/ Packages/integrations/*/*/; do
             if [ -f "$dir/package.json" ]; then
-              cd "$dir"
-              pnpm publish --no-git-checks --provenance --access public
+              cd "$ROOT/$dir"
+              npm publish --provenance --access public
+              cd "$ROOT"
             fi
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Generate Changelog
         run: pnpm dlx changelogithub
         env:
