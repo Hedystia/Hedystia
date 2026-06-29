@@ -37,12 +37,18 @@ function viewJSXPlugin(_options: ViewPluginOptions): Plugin {
 function viewCSSCollectorPlugin(collectedCSS: Map<string, string>): Plugin {
   return {
     name: "@hedystia/view:css-collector",
-    enforce: "pre",
+    // Use buildEnd to collect CSS after it has been fully processed
+    buildEnd() {
+      // CSS should have been collected during transform
+    },
     transform(code, id) {
-      if (!CSS_RE.test(id)) {
-        return;
+      // Collect CSS files that are being imported
+      // This runs before TailwindCSS processes them, but we track the import
+      if (CSS_RE.test(id)) {
+        collectedCSS.set(id.replace(/\\/g, "/"), code);
       }
-      collectedCSS.set(id.replace(/\\/g, "/"), code);
+      // Return undefined to let other plugins process the CSS
+      return;
     },
   };
 }
