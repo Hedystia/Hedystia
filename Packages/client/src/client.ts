@@ -107,6 +107,10 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
               const status = res.status;
               const ok = res.ok;
 
+              if (responseFormat === "stream") {
+                return { error: null, data: res.body, status, ok };
+              }
+
               if (!ok) {
                 const errorData = await processResponse(res, responseFormat);
                 return { error: errorData, data: null, status, ok };

@@ -101,6 +101,14 @@ export class Hedystia<
       return data;
     }
 
+    if (data instanceof ReadableStream) {
+      const headers: Record<string, string> = {};
+      if (contentType) {
+        headers["Content-Type"] = contentType;
+      }
+      return new Response(data, { headers });
+    }
+
     if (contentType === "text/plain" || typeof data === "string") {
       return new Response(data, {
         headers: { "Content-Type": contentType || determineContentType(data) },
@@ -300,6 +308,46 @@ export class Hedystia<
           }
         }
 
+        const streamState: {
+          response: Response | null;
+          controller: ReadableStreamDefaultController | null;
+          encoder: TextEncoder;
+          stream: ReadableStream<Uint8Array> | null;
+        } = { response: null, controller: null, encoder: new TextEncoder(), stream: null };
+
+        const streamContext = {
+          write: (chunk: string | Uint8Array) => {
+            if (!streamState.stream) {
+              streamState.stream = new ReadableStream({
+                start(controller) {
+                  streamState.controller = controller;
+                },
+              });
+              streamState.response = new Response(streamState.stream, {
+                headers: { "Content-Type": "text/plain" },
+              });
+            }
+            if (streamState.controller) {
+              try {
+                streamState.controller.enqueue(
+                  typeof chunk === "string" ? streamState.encoder.encode(chunk) : chunk,
+                );
+              } catch {}
+            }
+            return streamContext;
+          },
+          end: (chunk?: string | Uint8Array) => {
+            if (chunk != null) {
+              streamContext.write(chunk);
+            }
+            if (streamState.controller) {
+              try {
+                streamState.controller.close();
+              } catch {}
+            }
+          },
+        };
+
         ctx = {
           req,
           params,
@@ -315,6 +363,7 @@ export class Hedystia<
           },
           set: this.createResponseContext(),
           publish: this.publish,
+          stream: streamContext,
         };
 
         for (let i = 0; i < hooks.onTransform.length; i++) {
@@ -365,7 +414,9 @@ export class Hedystia<
           }
         }
 
-        if (!(result instanceof Response)) {
+        if (streamState.response) {
+          result = streamState.response;
+        } else if (!(result instanceof Response)) {
           result = Hedystia.createResponse(result);
         }
 

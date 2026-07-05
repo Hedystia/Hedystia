@@ -69,6 +69,8 @@ export async function processResponse(response: Response, format: ResponseFormat
         return await response.arrayBuffer();
       case "blob":
         return await response.blob();
+      case "stream":
+        return response.body;
       default:
         return await response.json().catch(() => null);
     }

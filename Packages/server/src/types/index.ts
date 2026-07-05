@@ -86,6 +86,11 @@ export type RouteSchema = {
   tags?: string[];
 };
 
+export type StreamContext = {
+  write: (chunk: string | Uint8Array) => StreamContext;
+  end: (chunk?: string | Uint8Array) => void;
+};
+
 export type InferRouteContext<
   T extends RouteSchema,
   M extends MacroData = {},
@@ -102,6 +107,7 @@ export type InferRouteContext<
   rawHeaders: Record<string, string>;
   error: (statusCode: number, message?: string) => never;
   set: ResponseContext;
+  stream: StreamContext;
 } & Pick<M, EnabledMacros>;
 
 export type CorsOptions = {
@@ -148,6 +154,7 @@ export type ContextTypes<T extends RouteSchema = {}, Routes extends RouteDefinit
   error: (statusCode: number, message?: string) => never;
   set: ResponseContext;
   publish: PublishMethod<Routes>;
+  stream: StreamContext;
 };
 
 export type RequestHandler = (ctx: ContextTypes) => Response | Promise<Response>;
@@ -216,7 +223,7 @@ export type SubscriptionContext<
   T extends RouteSchema = {},
   M extends MacroData = {},
   EnabledMacros extends keyof M = never,
-> = Omit<ContextTypes<T>, "set"> & {
+> = Omit<ContextTypes<T>, "set" | "stream"> & {
   ws: ServerWebSocket;
   rawHeaders: Record<string, string>;
   data: T["data"] extends ValidationSchema ? InferOutput<T["data"]> : any;

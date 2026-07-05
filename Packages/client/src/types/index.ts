@@ -1,6 +1,13 @@
 import type { Hedystia, RouteDefinition } from "hedystia";
 
-export type ResponseFormat = "json" | "text" | "formData" | "bytes" | "arrayBuffer" | "blob";
+export type ResponseFormat =
+  | "json"
+  | "text"
+  | "formData"
+  | "bytes"
+  | "arrayBuffer"
+  | "blob"
+  | "stream";
 
 export type SubscriptionCallback<M = any> = (event: {
   data?: any;
