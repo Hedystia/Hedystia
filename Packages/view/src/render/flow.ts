@@ -8,102 +8,12 @@ import { effect } from "../jsx/element";
 import { tick } from "../scheduler";
 import { onCleanup as signalOnCleanup, val } from "../signal";
 import type { Accessor } from "../types";
+import { insertNodesAfter, pendingInsertions, removeNodes, resolveNodes } from "./flow-helpers";
 
 /**
  * Check if running in browser
  */
 const isBrowser = typeof document !== "undefined";
-
-/** @internal - Map of markers with pending insertions (for nested flow components) */
-const pendingInsertions = new Map<Comment, () => void>();
-
-/** @internal - After inserting nodes, flush any pending insertions for markers among them */
-export function flushPending(nodes: Node[]): void {
-  for (const node of nodes) {
-    if (node instanceof Comment && pendingInsertions.has(node)) {
-      const pending = pendingInsertions.get(node)!;
-      pendingInsertions.delete(node);
-      pending();
-    }
-  }
-}
-
-/** @internal - Insert multiple nodes sequentially after a marker */
-function insertNodesAfter(marker: Comment, nodes: Node[]): void {
-  const doInsert = () => {
-    if (marker.parentNode) {
-      let ref: Node = marker;
-      for (const node of nodes) {
-        if (!node.parentNode) {
-          marker.parentNode!.insertBefore(node, ref.nextSibling);
-        }
-        ref = node;
-      }
-      flushPending(nodes);
-    }
-  };
-
-  if (marker.parentNode) {
-    doInsert();
-  } else {
-    // If no parent yet, we wait a bit, but also we can check if it's attached later.
-    pendingInsertions.set(marker, doInsert);
-    // Use queueMicrotask as a fallback
-    queueMicrotask(() => {
-      if (pendingInsertions.has(marker) && marker.parentNode) {
-        pendingInsertions.delete(marker);
-        doInsert();
-      }
-    });
-  }
-}
-
-/** @internal - Remove a node from the DOM if attached */
-function removeNode(node: Node | null): void {
-  if (node?.parentNode) {
-    node.parentNode.removeChild(node);
-  }
-}
-
-/** @internal - Remove multiple nodes from the DOM */
-function removeNodes(nodes: Node[]): void {
-  for (const node of nodes) {
-    removeNode(node);
-  }
-}
-
-/** @internal - Resolve any content value into an array of DOM nodes */
-export function resolveNodes(content: any): Node[] {
-  if (content == null || content === false) {
-    return [];
-  }
-  if (typeof content === "function") {
-    // Use val() to unwrap and register dependencies if it's a reactive accessor
-    return resolveNodes(val(content));
-  }
-  if (Array.isArray(content)) {
-    const result: Node[] = [];
-    for (const item of content) {
-      result.push(...resolveNodes(item));
-    }
-    return result;
-  }
-  if (content instanceof DocumentFragment) {
-    return Array.from(content.childNodes);
-  }
-  if (
-    content instanceof HTMLElement ||
-    content instanceof Text ||
-    content instanceof Comment ||
-    (typeof SVGElement !== "undefined" && content instanceof SVGElement)
-  ) {
-    return [content];
-  }
-  if (typeof content === "string" || typeof content === "number") {
-    return [document.createTextNode(String(content))];
-  }
-  return [];
-}
 
 /**
  * Conditionally render children based on a condition

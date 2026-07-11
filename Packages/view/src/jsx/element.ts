@@ -6,7 +6,6 @@
  */
 
 import type { JSX } from "../jsx.d";
-import { flushPending } from "../render/flow";
 import { tick } from "../scheduler";
 import { adopt, Owner, runComputation, val } from "../signal";
 import type { Accessor, Computation } from "../types";
@@ -27,162 +26,38 @@ export type ElementType<P = {}> = string | FunctionComponent<P>;
 const isBrowser = typeof document !== "undefined";
 
 /**
- * SVG namespace URI
+ * Lazily resolve SVG data from globalThis (registered by svg-map module).
+ * Returns false / identity when no SVG map is loaded.
  */
-export const SVG_NS = "http://www.w3.org/2000/svg";
+function isSvgElement(type: string): boolean {
+  return (globalThis as Record<string, unknown>).__view_svg_elements instanceof Set
+    ? ((globalThis as Record<string, unknown>).__view_svg_elements as Set<string>).has(type)
+    : false;
+}
 
-/**
- * Set of SVG element tag names that require createElementNS
- */
-export const SVG_ELEMENTS = new Set([
-  "svg",
-  "animate",
-  "animateMotion",
-  "animateTransform",
-  "circle",
-  "clipPath",
-  "defs",
-  "desc",
-  "ellipse",
-  "feBlend",
-  "feColorMatrix",
-  "feComponentTransfer",
-  "feComposite",
-  "feConvolveMatrix",
-  "feDiffuseLighting",
-  "feDisplacementMap",
-  "feDistantLight",
-  "feDropShadow",
-  "feFlood",
-  "feFuncA",
-  "feFuncB",
-  "feFuncG",
-  "feFuncR",
-  "feGaussianBlur",
-  "feImage",
-  "feMerge",
-  "feMergeNode",
-  "feMorphology",
-  "feOffset",
-  "fePointLight",
-  "feSpecularLighting",
-  "feSpotLight",
-  "feTile",
-  "feTurbulence",
-  "filter",
-  "foreignObject",
-  "g",
-  "image",
-  "line",
-  "linearGradient",
-  "marker",
-  "mask",
-  "metadata",
-  "mpath",
-  "path",
-  "pattern",
-  "polygon",
-  "polyline",
-  "radialGradient",
-  "rect",
-  "stop",
-  "switch",
-  "symbol",
-  "text",
-  "textPath",
-  "title",
-  "tspan",
-  "use",
-  "view",
-]);
+function getSvgNs(): string {
+  return (
+    ((globalThis as Record<string, unknown>).__view_svg_ns as string) ??
+    "http://www.w3.org/2000/svg"
+  );
+}
 
-/**
- * SVG attributes that use camelCase in JSX but need kebab-case in the DOM
- */
-export const SVG_ATTR_MAP: Record<string, string> = {
-  accentHeight: "accent-height",
-  alignmentBaseline: "alignment-baseline",
-  arabicForm: "arabic-form",
-  baselineShift: "baseline-shift",
-  capHeight: "cap-height",
-  clipPath: "clip-path",
-  clipRule: "clip-rule",
-  colorInterpolation: "color-interpolation",
-  colorInterpolationFilters: "color-interpolation-filters",
-  colorProfile: "color-profile",
-  colorRendering: "color-rendering",
-  dominantBaseline: "dominant-baseline",
-  enableBackground: "enable-background",
-  fillOpacity: "fill-opacity",
-  fillRule: "fill-rule",
-  floodColor: "flood-color",
-  floodOpacity: "flood-opacity",
-  fontFamily: "font-family",
-  fontSize: "font-size",
-  fontSizeAdjust: "font-size-adjust",
-  fontStretch: "font-stretch",
-  fontStyle: "font-style",
-  fontVariant: "font-variant",
-  fontWeight: "font-weight",
-  glyphName: "glyph-name",
-  glyphOrientationHorizontal: "glyph-orientation-horizontal",
-  glyphOrientationVertical: "glyph-orientation-vertical",
-  horizAdvX: "horiz-adv-x",
-  horizOriginX: "horiz-origin-x",
-  imageRendering: "image-rendering",
-  letterSpacing: "letter-spacing",
-  lightingColor: "lighting-color",
-  markerEnd: "marker-end",
-  markerMid: "marker-mid",
-  markerStart: "marker-start",
-  overlinePosition: "overline-position",
-  overlineThickness: "overline-thickness",
-  paintOrder: "paint-order",
-  panose1: "panose-1",
-  pointerEvents: "pointer-events",
-  shapeRendering: "shape-rendering",
-  stopColor: "stop-color",
-  stopOpacity: "stop-opacity",
-  strikethroughPosition: "strikethrough-position",
-  strikethroughThickness: "strikethrough-thickness",
-  strokeDasharray: "stroke-dasharray",
-  strokeDashoffset: "stroke-dashoffset",
-  strokeLinecap: "stroke-linecap",
-  strokeLinejoin: "stroke-linejoin",
-  strokeMiterlimit: "stroke-miterlimit",
-  strokeOpacity: "stroke-opacity",
-  strokeWidth: "stroke-width",
-  textAnchor: "text-anchor",
-  textDecoration: "text-decoration",
-  textRendering: "text-rendering",
-  underlinePosition: "underline-position",
-  underlineThickness: "underline-thickness",
-  unicodeBidi: "unicode-bidi",
-  unicodeRange: "unicode-range",
-  unitsPerEm: "units-per-em",
-  vAlphabetic: "v-alphabetic",
-  vHanging: "v-hanging",
-  vIdeographic: "v-ideographic",
-  vMathematical: "v-mathematical",
-  vectorEffect: "vector-effect",
-  vertAdvY: "vert-adv-y",
-  vertOriginX: "vert-origin-x",
-  vertOriginY: "vert-origin-y",
-  wordSpacing: "word-spacing",
-  writingMode: "writing-mode",
-  xHeight: "x-height",
-  xlinkActuate: "xlink:actuate",
-  xlinkArcrole: "xlink:arcrole",
-  xlinkHref: "xlink:href",
-  xlinkRole: "xlink:role",
-  xlinkShow: "xlink:show",
-  xlinkTitle: "xlink:title",
-  xlinkType: "xlink:type",
-  xmlBase: "xml:base",
-  xmlLang: "xml:lang",
-  xmlSpace: "xml:space",
-  xmlnsXlink: "xmlns:xlink",
-};
+function svgAttr(key: string): string {
+  const map = (globalThis as Record<string, unknown>).__view_svg_attr_map as
+    | Record<string, string>
+    | undefined;
+  return map?.[key] ?? key;
+}
+
+// ── flow-hook registration ──────────────────────────────────────────
+// flow-helpers.ts registers a callback so we can flush pending
+// insertions without importing flow-helpers directly.
+let _flushPending: ((nodes: Node[]) => void) | null = null;
+
+/** @internal – called by flow-helpers.ts at module init */
+export function _registerFlowHook(fn: (nodes: Node[]) => void): void {
+  _flushPending = fn;
+}
 
 /**
  * Create a real DOM element from JSX props
@@ -208,8 +83,8 @@ export function jsx<P>(type: ElementType<P>, props: P & { children?: JSX.Element
   }
 
   // Handle intrinsic elements (strings)
-  const isSvg = SVG_ELEMENTS.has(type);
-  const element = isSvg ? document.createElementNS(SVG_NS, type) : document.createElement(type);
+  const isSvg = isSvgElement(type);
+  const element = isSvg ? document.createElementNS(getSvgNs(), type) : document.createElement(type);
 
   for (const key in rest) {
     if (!Object.hasOwn(rest, key)) {
@@ -261,8 +136,8 @@ export function jsxs<P>(
   }
 
   // Handle intrinsic elements (strings)
-  const isSvg = SVG_ELEMENTS.has(type);
-  const element = isSvg ? document.createElementNS(SVG_NS, type) : document.createElement(type);
+  const isSvg = isSvgElement(type);
+  const element = isSvg ? document.createElementNS(getSvgNs(), type) : document.createElement(type);
 
   for (const key in rest) {
     if (!Object.hasOwn(rest, key)) {
@@ -332,7 +207,7 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
     return;
   }
 
-  const attrName = isSvg ? SVG_ATTR_MAP[key] || key : key;
+  const attrName = isSvg ? svgAttr(key) : key;
 
   if (key.startsWith("on") && typeof value === "function") {
     const eventName = key.slice(2).toLowerCase();
@@ -475,8 +350,8 @@ function appendSingleChild(element: Element | DocumentFragment, child: JSX.Child
     (typeof SVGElement !== "undefined" && child instanceof SVGElement)
   ) {
     element.appendChild(child);
-    if (child instanceof Comment || child instanceof DocumentFragment) {
-      flushPending([child]);
+    if (_flushPending && (child instanceof Comment || child instanceof DocumentFragment)) {
+      _flushPending([child]);
     }
   }
 }

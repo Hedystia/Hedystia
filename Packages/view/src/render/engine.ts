@@ -4,10 +4,19 @@
  * Mounts components to the DOM and manages the render cycle.
  */
 
-import { SVG_ATTR_MAP, SVG_ELEMENTS } from "../jsx/element";
 import { createRoot, Owner } from "../signal";
 import type { Component, Owner as OwnerType } from "../types";
-import { resolveNodes } from "./flow";
+import { resolveNodes } from "./flow-helpers";
+
+function getSvgElements(): Set<string> {
+  return ((globalThis as Record<string, unknown>).__view_svg_elements as Set<string>) ?? new Set();
+}
+
+function getSvgAttrMap(): Record<string, string> {
+  return (
+    ((globalThis as Record<string, unknown>).__view_svg_attr_map as Record<string, string>) ?? {}
+  );
+}
 
 /**
  * Application instance returned by mount
@@ -226,8 +235,8 @@ function renderElement(element: unknown): string {
         continue;
       }
       let attrName = key === "className" ? "class" : key === "htmlFor" ? "for" : key;
-      if (SVG_ELEMENTS.has(tagName)) {
-        attrName = SVG_ATTR_MAP[attrName] || attrName;
+      if (getSvgElements().has(tagName)) {
+        attrName = getSvgAttrMap()[attrName] || attrName;
       }
       const serialized = serializeAttrValue(key, value);
       if (serialized === null) {
