@@ -1,26 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: [
-    "src/index.ts",
-    "src/jsx-runtime.ts",
-    "src/jsx-dev-runtime.ts",
-    "src/vite.ts",
-    "src/signal/index.ts",
-    "src/jsx/index.ts",
-    "src/render/engine.ts",
-    "src/render/flow.ts",
-    "src/render/flow-helpers.ts",
-    "src/store/index.ts",
-    "src/watch/index.ts",
-    "src/context/index.ts",
-    "src/lifecycle/index.ts",
-    "src/fetch/index.ts",
-    "src/style/index.ts",
-    "src/text/index.ts",
-    "src/scheduler/index.ts",
-    "src/svg-map.ts",
-  ],
+  entry: ["src/index.ts", "src/jsx-runtime.ts", "src/jsx-dev-runtime.ts", "src/vite.ts"],
   format: ["cjs", "esm"],
   dts: true,
   sourcemap: true,
