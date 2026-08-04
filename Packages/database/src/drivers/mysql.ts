@@ -1,7 +1,7 @@
 import { DriverError } from "../errors";
 import type { ColumnMetadata, MySQLConnectionConfig, TableMetadata } from "../types";
 import { BaseDriver } from "./driver";
-import { compileColumnDef, compileCreateTable } from "./sql-compiler";
+import { compileColumnDef, compileCreateTable, quoteIdentifier } from "./sql-compiler";
 
 interface MySQLPool {
   query(sql: string, params?: any[]): Promise<[any, any]>;
@@ -284,6 +284,43 @@ export class MySQLDriver extends BaseDriver {
    */
   async renameColumn(table: string, oldName: string, newName: string): Promise<void> {
     await this.execute(`ALTER TABLE \`${table}\` RENAME COLUMN \`${oldName}\` TO \`${newName}\``);
+  }
+
+  /**
+   * Create an index on one or more columns.
+   *
+   * The generated index name follows `${table}_${columns.join("_")}_index`.
+   *
+   * @param {string} table - Table name
+   * @param {string[]} columns - Column names included in the index
+   * @param {boolean} [unique=false] - Whether the index should enforce uniqueness
+   * @returns {Promise<void>} Resolves after the index is created
+   * @throws {DriverError} If no columns are provided or the database rejects the statement
+   */
+  async addIndex(table: string, columns: string[], unique = false): Promise<void> {
+    if (columns.length === 0) {
+      throw new DriverError("Index must contain at least one column");
+    }
+    const indexName = `${table}_${columns.join("_")}_index`;
+    const uniqueKeyword = unique ? "UNIQUE " : "";
+    const columnList = columns.map((column) => quoteIdentifier(column, "mysql")).join(", ");
+    await this.execute(
+      `CREATE ${uniqueKeyword}INDEX ${quoteIdentifier(indexName, "mysql")} ON ${quoteIdentifier(table, "mysql")} (${columnList})`,
+    );
+  }
+
+  /**
+   * Drop an index by name.
+   *
+   * @param {string} _table - Table containing the index
+   * @param {string} indexName - Index name to drop
+   * @returns {Promise<void>} Resolves after the index is dropped
+   * @throws {DriverError} If the database rejects the statement
+   */
+  async dropIndex(_table: string, indexName: string): Promise<void> {
+    await this.execute(
+      `DROP INDEX ${quoteIdentifier(indexName, "mysql")} ON ${quoteIdentifier(_table, "mysql")}`,
+    );
   }
 
   /**
