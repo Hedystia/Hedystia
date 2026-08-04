@@ -122,16 +122,19 @@ export type TableDefinition<
 export type InferRow<T> = T extends { __row: infer R } ? R : never;
 
 /** Extract the insertable type from a table definition (auto-increment keys become optional) */
-export type InferInsert<T> =
-  T extends TableDefinition<infer R, any, any>
-    ? {
-        [K in keyof R as K extends AutoIncrementKeys<T> ? never : K]: R[K];
-      } & {
-        [K in AutoIncrementKeys<T>]?: R[K];
-      }
-    : never;
+export type InferInsert<T> = T extends { __row: infer R }
+  ? {
+      [K in keyof R as K extends AutoIncrementKeys<T> ? never : K]: R[K];
+    } & {
+      [K in Extract<AutoIncrementKeys<T>, keyof R>]?: R[K];
+    }
+  : never;
 
-type AutoIncrementKeys<T> = T extends TableDefinition<infer R, any, any> ? keyof R : never;
+type AutoIncrementKeys<T> = T extends { __table: true }
+  ? {
+      [K in keyof T]-?: T[K] extends { readonly __autoIncrement: true } ? K : never;
+    }[keyof T]
+  : never;
 
 /** Extract the updatable type from a table definition (all fields become optional) */
 export type InferUpdate<T> = T extends TableDefinition<infer R, any, any> ? Partial<R> : never;
@@ -406,6 +409,8 @@ export interface DatabaseDriver {
   addColumn(table: string, column: ColumnMetadata): Promise<void>;
   dropColumn(table: string, name: string): Promise<void>;
   renameColumn(table: string, oldName: string, newName: string): Promise<void>;
+  addIndex(table: string, columns: string[], unique?: boolean): Promise<void>;
+  dropIndex(table: string, indexName: string): Promise<void>;
   transaction<T>(fn: () => Promise<T>): Promise<T>;
   getAllTableColumns?(): Promise<Record<string, ColumnMetadata[]>>;
 }
