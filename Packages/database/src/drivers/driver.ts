@@ -82,6 +82,21 @@ export abstract class BaseDriver implements DatabaseDriver {
   abstract renameColumn(table: string, oldName: string, newName: string): Promise<void>;
 
   /**
+   * Create an index on one or more columns.
+   * @param {string} table - Table name
+   * @param {string[]} columns - Column names
+   * @param {boolean} [unique] - Whether the index should enforce uniqueness
+   */
+  abstract addIndex(table: string, columns: string[], unique?: boolean): Promise<void>;
+
+  /**
+   * Drop an index by name.
+   * @param {string} table - Table name
+   * @param {string} indexName - Index name
+   */
+  abstract dropIndex(table: string, indexName: string): Promise<void>;
+
+  /**
    * Execute a function within a transaction
    * @param {() => Promise<T>} fn - Function to execute within the transaction
    * @returns {Promise<T>} Function result
