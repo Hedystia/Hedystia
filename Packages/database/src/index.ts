@@ -3,6 +3,7 @@ import { database } from "./core/database";
 import { TableRepository } from "./core/repository";
 import { createDriver } from "./drivers";
 import {
+  compileBulkInsert,
   compileColumnDef,
   compileCreateTable,
   compileDelete,
@@ -65,6 +66,7 @@ export {
   CacheManager,
   ColumnBuilder,
   columns,
+  compileBulkInsert,
   compileColumnDef,
   compileCreateTable,
   compileDelete,
