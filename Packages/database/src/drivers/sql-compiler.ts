@@ -8,13 +8,65 @@ import type {
 } from "../types";
 
 /**
+ * Resolve the database name from a dialect string or provider configuration.
+ *
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Normalized database dialect name
+ */
+export function dialectName(dialect?: DatabaseType | string): string {
+  if (!dialect) {
+    return "mysql";
+  }
+  return typeof dialect === "string" ? dialect : dialect.name;
+}
+
+/**
+ * Quote an SQL identifier using the quoting rules for a dialect.
+ *
+ * @param {string} identifier - Table, column, or index identifier
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Safely quoted SQL identifier
+ */
+export function quoteIdentifier(identifier: string, dialect?: DatabaseType | string): string {
+  const name = dialectName(dialect);
+  if (name === "postgres") {
+    return `"${identifier.replaceAll('"', '""')}"`;
+  }
+  return `\`${identifier.replaceAll("`", "``")}\``;
+}
+
+/**
+ * Create a parameter placeholder using the dialect's parameter syntax.
+ *
+ * @param {number} index - One-based parameter index
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Dialect-specific placeholder (`?` or `$n`)
+ */
+export function placeholder(index: number, dialect?: DatabaseType | string): string {
+  return dialectName(dialect) === "postgres" ? `$${index}` : "?";
+}
+
+/**
+ * Append a parameter and return its dialect-specific placeholder.
+ *
+ * @param {unknown[]} params - Parameter array that receives the value
+ * @param {unknown} value - Value to bind
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Placeholder referencing the appended parameter
+ */
+function addParam(params: unknown[], value: unknown, dialect?: DatabaseType | string): string {
+  params.push(value);
+  return placeholder(params.length, dialect);
+}
+
+/**
  * Compile column type to SQL string for a specific database dialect
  * @param {ColumnMetadata} col - Column metadata
  * @param {DatabaseType} dialect - Database dialect
  * @returns {string} SQL column type string
  */
 export function compileColumnType(col: ColumnMetadata, dialect: DatabaseType): string {
-  const name = typeof dialect === "string" ? dialect : dialect.name;
+  const name = dialectName(dialect);
 
   const typeMap: Record<ColumnDataType, Record<string, string>> = {
     integer: {
@@ -90,9 +142,8 @@ export function compileColumnType(col: ColumnMetadata, dialect: DatabaseType): s
  * @returns {string} SQL column definition
  */
 export function compileColumnDef(col: ColumnMetadata, dialect: DatabaseType): string {
-  const name = typeof dialect === "string" ? dialect : dialect.name;
-  const quote = (s: string) => (name === "postgres" ? `"${s}"` : `\`${s}\``);
-  const parts: string[] = [quote(col.name), compileColumnType(col, dialect)];
+  const name = dialectName(dialect);
+  const parts: string[] = [quoteIdentifier(col.name, dialect), compileColumnType(col, dialect)];
 
   if (col.primaryKey) {
     parts.push("PRIMARY KEY");
@@ -114,7 +165,7 @@ export function compileColumnDef(col: ColumnMetadata, dialect: DatabaseType): st
   }
   if (col.defaultValue !== undefined) {
     if (typeof col.defaultValue === "string") {
-      parts.push(`DEFAULT '${col.defaultValue}'`);
+      parts.push(`DEFAULT '${col.defaultValue.replaceAll("'", "''")}'`);
     } else if (col.defaultValue === null) {
       parts.push("DEFAULT NULL");
     } else if (col.defaultValue instanceof Date) {
@@ -134,8 +185,6 @@ export function compileColumnDef(col: ColumnMetadata, dialect: DatabaseType): st
  * @returns {string} CREATE TABLE SQL statement
  */
 export function compileCreateTable(table: TableMetadata, dialect: DatabaseType): string {
-  const name = typeof dialect === "string" ? dialect : dialect.name;
-  const quote = (s: string) => (name === "postgres" ? `"${s}"` : `\`${s}\``);
   const columnDefs: string[] = [];
   const constraints: string[] = [];
 
@@ -146,13 +195,13 @@ export function compileCreateTable(table: TableMetadata, dialect: DatabaseType):
       const onDelete = col.references.onDelete ? ` ON DELETE ${col.references.onDelete}` : "";
       const onUpdate = col.references.onUpdate ? ` ON UPDATE ${col.references.onUpdate}` : "";
       constraints.push(
-        `FOREIGN KEY (${quote(col.name)}) REFERENCES ${quote(col.references.table)}(${quote(col.references.column)})${onDelete}${onUpdate}`,
+        `FOREIGN KEY (${quoteIdentifier(col.name, dialect)}) REFERENCES ${quoteIdentifier(col.references.table, dialect)}(${quoteIdentifier(col.references.column, dialect)})${onDelete}${onUpdate}`,
       );
     }
   }
 
   const allDefs = [...columnDefs, ...constraints].join(", ");
-  return `CREATE TABLE IF NOT EXISTS ${quote(table.name)} (${allDefs})`;
+  return `CREATE TABLE IF NOT EXISTS ${quoteIdentifier(table.name, dialect)} (${allDefs})`;
 }
 
 /**
@@ -162,8 +211,11 @@ export function compileCreateTable(table: TableMetadata, dialect: DatabaseType):
  * @param {string} [dialect] - Database dialect
  * @returns {string} SQL WHERE fragment
  */
-export function compileWhere(where: WhereClause, params: unknown[], dialect?: string): string {
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
+export function compileWhere(
+  where: WhereClause,
+  params: unknown[],
+  dialect?: DatabaseType | string,
+): string {
   const conditions: string[] = [];
 
   for (const [key, value] of Object.entries(where)) {
@@ -184,61 +236,52 @@ export function compileWhere(where: WhereClause, params: unknown[], dialect?: st
 
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       const cond = value as WhereCondition;
+      const column = quoteIdentifier(key, dialect);
       if (cond.eq !== undefined) {
-        params.push(cond.eq);
-        conditions.push(`${quote(key)} = ?`);
+        conditions.push(`${column} = ${addParam(params, cond.eq, dialect)}`);
       }
       if (cond.neq !== undefined) {
-        params.push(cond.neq);
-        conditions.push(`${quote(key)} != ?`);
+        conditions.push(`${column} != ${addParam(params, cond.neq, dialect)}`);
       }
       if (cond.gt !== undefined) {
-        params.push(cond.gt);
-        conditions.push(`${quote(key)} > ?`);
+        conditions.push(`${column} > ${addParam(params, cond.gt, dialect)}`);
       }
       if (cond.gte !== undefined) {
-        params.push(cond.gte);
-        conditions.push(`${quote(key)} >= ?`);
+        conditions.push(`${column} >= ${addParam(params, cond.gte, dialect)}`);
       }
       if (cond.lt !== undefined) {
-        params.push(cond.lt);
-        conditions.push(`${quote(key)} < ?`);
+        conditions.push(`${column} < ${addParam(params, cond.lt, dialect)}`);
       }
       if (cond.lte !== undefined) {
-        params.push(cond.lte);
-        conditions.push(`${quote(key)} <= ?`);
+        conditions.push(`${column} <= ${addParam(params, cond.lte, dialect)}`);
       }
       if (cond.like !== undefined) {
-        params.push(cond.like);
-        conditions.push(`${quote(key)} LIKE ?`);
+        conditions.push(`${column} LIKE ${addParam(params, cond.like, dialect)}`);
       }
       if (cond.notLike !== undefined) {
-        params.push(cond.notLike);
-        conditions.push(`${quote(key)} NOT LIKE ?`);
+        conditions.push(`${column} NOT LIKE ${addParam(params, cond.notLike, dialect)}`);
       }
       if (cond.in !== undefined && Array.isArray(cond.in)) {
-        const placeholders = cond.in.map(() => "?").join(", ");
-        params.push(...cond.in);
-        conditions.push(`${quote(key)} IN (${placeholders})`);
+        const placeholders = cond.in.map((value) => addParam(params, value, dialect)).join(", ");
+        conditions.push(`${column} IN (${placeholders})`);
       }
       if (cond.notIn !== undefined && Array.isArray(cond.notIn)) {
-        const placeholders = cond.notIn.map(() => "?").join(", ");
-        params.push(...cond.notIn);
-        conditions.push(`${quote(key)} NOT IN (${placeholders})`);
+        const placeholders = cond.notIn.map((value) => addParam(params, value, dialect)).join(", ");
+        conditions.push(`${column} NOT IN (${placeholders})`);
       }
       if (cond.isNull === true) {
-        conditions.push(`${quote(key)} IS NULL`);
+        conditions.push(`${column} IS NULL`);
       }
       if (cond.isNull === false) {
-        conditions.push(`${quote(key)} IS NOT NULL`);
+        conditions.push(`${column} IS NOT NULL`);
       }
       if (cond.between !== undefined && Array.isArray(cond.between)) {
-        params.push(cond.between[0], cond.between[1]);
-        conditions.push(`${quote(key)} BETWEEN ? AND ?`);
+        const start = addParam(params, cond.between[0], dialect);
+        const end = addParam(params, cond.between[1], dialect);
+        conditions.push(`${column} BETWEEN ${start} AND ${end}`);
       }
     } else {
-      params.push(value);
-      conditions.push(`${quote(key)} = ?`);
+      conditions.push(`${quoteIdentifier(key, dialect)} = ${addParam(params, value, dialect)}`);
     }
   }
 
@@ -246,12 +289,18 @@ export function compileWhere(where: WhereClause, params: unknown[], dialect?: st
 }
 
 /**
- * Compile a SELECT query from options
+ * Compile a SELECT query from options.
+ *
  * @param {string} tableName - Table name
- * @param {object} options - Query options
- * @param {unknown[]} params - Parameter array
- * @param {string} [dialect] - Database dialect
- * @returns {string} SQL SELECT statement
+ * @param {object} options - Selection, filtering, ordering, and pagination options
+ * @param {string[]} [options.select] - Columns to select
+ * @param {WhereClause} [options.where] - Filtering conditions
+ * @param {Record<string, "asc" | "desc">} [options.orderBy] - Sort order by column
+ * @param {number} [options.take] - Maximum number of rows
+ * @param {number} [options.skip] - Number of rows to skip
+ * @param {unknown[]} params - Parameter array to receive bound values
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Compiled SQL SELECT statement
  */
 export function compileSelect(
   tableName: string,
@@ -263,18 +312,17 @@ export function compileSelect(
     skip?: number;
   },
   params: unknown[],
-  dialect?: string,
+  dialect?: DatabaseType | string,
 ): string {
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
-  const cols = options.select?.map((c) => quote(String(c))).join(", ") ?? "*";
-  let sql = `SELECT ${cols} FROM ${quote(tableName)}`;
+  const cols = options.select?.map((c) => quoteIdentifier(String(c), dialect)).join(", ") ?? "*";
+  let sql = `SELECT ${cols} FROM ${quoteIdentifier(tableName, dialect)}`;
 
   if (options.where && Object.keys(options.where).length > 0) {
     sql += ` WHERE ${compileWhere(options.where, params, dialect)}`;
   }
   if (options.orderBy) {
     const orderParts = Object.entries(options.orderBy).map(
-      ([col, dir]) => `${quote(col)} ${dir.toUpperCase()}`,
+      ([col, dir]) => `${quoteIdentifier(col, dialect)} ${dir.toUpperCase()}`,
     );
     if (orderParts.length > 0) {
       sql += ` ORDER BY ${orderParts.join(", ")}`;
@@ -291,80 +339,74 @@ export function compileSelect(
 }
 
 /**
- * Compile an INSERT statement
+ * Compile an INSERT statement.
+ *
  * @param {string} tableName - Table name
- * @param {Record<string, unknown>} data - Data to insert
- * @param {unknown[]} params - Parameter array
- * @param {string} [dialect] - Database dialect
- * @returns {string} SQL INSERT statement
+ * @param {Record<string, unknown>} data - Column values to insert
+ * @param {unknown[]} params - Parameter array to receive bound values
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Compiled SQL INSERT statement
  */
 export function compileInsert(
   tableName: string,
   data: Record<string, unknown>,
   params: unknown[],
-  dialect?: string,
+  dialect?: DatabaseType | string,
 ): string {
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
   const keys = Object.keys(data);
-  const cols = keys.map((k) => quote(k)).join(", ");
-  const placeholders = keys.map(() => "?").join(", ");
-  params.push(...keys.map((k) => data[k]));
-  return `INSERT INTO ${quote(tableName)} (${cols}) VALUES (${placeholders})`;
+  const cols = keys.map((k) => quoteIdentifier(k, dialect)).join(", ");
+  const placeholders = keys.map((key) => addParam(params, data[key], dialect)).join(", ");
+  return `INSERT INTO ${quoteIdentifier(tableName, dialect)} (${cols}) VALUES (${placeholders})`;
 }
 
 /**
- * Compile a bulk INSERT statement for multiple rows
+ * Compile a bulk INSERT statement for multiple rows.
+ *
  * @param {string} tableName - Table name
- * @param {Record<string, unknown>[]} data - Array of data to insert
- * @param {unknown[]} params - Parameter array
- * @param {string} [dialect] - Database dialect
- * @returns {string} SQL bulk INSERT statement
+ * @param {Record<string, unknown>[]} data - Rows to insert; all rows use the first row's columns
+ * @param {unknown[]} params - Parameter array to receive bound values
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Compiled SQL bulk INSERT statement, or an empty string for no rows
  */
 export function compileBulkInsert(
   tableName: string,
   data: Record<string, unknown>[],
   params: unknown[],
-  dialect?: string,
+  dialect?: DatabaseType | string,
 ): string {
   if (data.length === 0) {
     return "";
   }
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
   const keys = Object.keys(data[0]!);
-  const cols = keys.map((k) => quote(k)).join(", ");
-  const valuePlaceholders = data.map(() => `(${keys.map(() => "?").join(", ")})`).join(", ");
+  const cols = keys.map((k) => quoteIdentifier(k, dialect)).join(", ");
+  const valuePlaceholders = data
+    .map((row) => `(${keys.map((key) => addParam(params, row[key], dialect)).join(", ")})`)
+    .join(", ");
 
-  for (const row of data) {
-    for (const key of keys) {
-      params.push(row[key]);
-    }
-  }
-
-  return `INSERT INTO ${quote(tableName)} (${cols}) VALUES ${valuePlaceholders}`;
+  return `INSERT INTO ${quoteIdentifier(tableName, dialect)} (${cols}) VALUES ${valuePlaceholders}`;
 }
 
 /**
- * Compile an UPDATE statement
+ * Compile an UPDATE statement.
+ *
  * @param {string} tableName - Table name
- * @param {Record<string, unknown>} data - Data to update
- * @param {WhereClause} where - Where clause
- * @param {unknown[]} params - Parameter array
- * @param {string} [dialect] - Database dialect
- * @returns {string} SQL UPDATE statement
+ * @param {Record<string, unknown>} data - Column values to update
+ * @param {WhereClause} where - Conditions identifying rows to update
+ * @param {unknown[]} params - Parameter array to receive bound values
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Compiled SQL UPDATE statement
  */
 export function compileUpdate(
   tableName: string,
   data: Record<string, unknown>,
   where: WhereClause,
   params: unknown[],
-  dialect?: string,
+  dialect?: DatabaseType | string,
 ): string {
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
-  const setParts = Object.keys(data).map((k) => {
-    params.push(data[k]);
-    return `${quote(k)} = ?`;
-  });
-  let sql = `UPDATE ${quote(tableName)} SET ${setParts.join(", ")}`;
+  const setParts = Object.keys(data).map(
+    (key) => `${quoteIdentifier(key, dialect)} = ${addParam(params, data[key], dialect)}`,
+  );
+  let sql = `UPDATE ${quoteIdentifier(tableName, dialect)} SET ${setParts.join(", ")}`;
   if (Object.keys(where).length > 0) {
     sql += ` WHERE ${compileWhere(where, params, dialect)}`;
   }
@@ -372,21 +414,21 @@ export function compileUpdate(
 }
 
 /**
- * Compile a DELETE statement
+ * Compile a DELETE statement.
+ *
  * @param {string} tableName - Table name
- * @param {WhereClause} where - Where clause
- * @param {unknown[]} params - Parameter array
- * @param {string} [dialect] - Database dialect
- * @returns {string} SQL DELETE statement
+ * @param {WhereClause} where - Conditions identifying rows to delete
+ * @param {unknown[]} params - Parameter array to receive bound values
+ * @param {DatabaseType | string} [dialect] - Database dialect or provider configuration
+ * @returns {string} Compiled SQL DELETE statement
  */
 export function compileDelete(
   tableName: string,
   where: WhereClause,
   params: unknown[],
-  dialect?: string,
+  dialect?: DatabaseType | string,
 ): string {
-  const quote = (s: string) => (dialect === "postgres" ? `"${s}"` : `\`${s}\``);
-  let sql = `DELETE FROM ${quote(tableName)}`;
+  let sql = `DELETE FROM ${quoteIdentifier(tableName, dialect)}`;
   if (Object.keys(where).length > 0) {
     sql += ` WHERE ${compileWhere(where, params, dialect)}`;
   }
