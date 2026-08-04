@@ -1,6 +1,7 @@
 import { CacheManager } from "../cache";
 import { MIGRATIONS_TABLE } from "../constants";
 import { createDriver } from "../drivers";
+import { dialectName, placeholder, quoteIdentifier } from "../drivers/sql-compiler";
 import { DatabaseError } from "../errors";
 import { SchemaRegistry } from "../schema";
 import type {
@@ -424,8 +425,12 @@ function createMigrationContext(
       renameColumn: async (table: string, oldName: string, newName: string) => {
         await driver.renameColumn(table, oldName, newName);
       },
-      addIndex: async () => {},
-      dropIndex: async () => {},
+      addIndex: async (table: string, columns: string[], unique?: boolean) => {
+        await driver.addIndex(table, columns, unique);
+      },
+      dropIndex: async (table: string, indexName: string) => {
+        await driver.dropIndex(table, indexName);
+      },
     },
     sql: async (query: string, params?: unknown[]) => {
       return driver.execute(query, params);
@@ -447,7 +452,11 @@ async function runMigrations(
 ): Promise<void> {
   await ensureMigrationsTable(driver);
 
-  const executed = await driver.query(`SELECT name FROM \`${MIGRATIONS_TABLE}\``);
+  const dialect = dialectName(driver.dialect);
+  const migrationsTable = quoteIdentifier(MIGRATIONS_TABLE, dialect);
+  const executed = await driver.query(
+    `SELECT ${quoteIdentifier("name", dialect)} FROM ${migrationsTable}`,
+  );
   const executedNames = new Set(executed.map((r: any) => r.name));
 
   const ctx = createMigrationContext(driver, registry);
@@ -460,7 +469,7 @@ async function runMigrations(
     await migration.up(ctx);
 
     await driver.execute(
-      `INSERT INTO \`${MIGRATIONS_TABLE}\` (\`name\`, \`executed_at\`) VALUES (?, ?)`,
+      `INSERT INTO ${migrationsTable} (${quoteIdentifier("name", dialect)}, ${quoteIdentifier("executed_at", dialect)}) VALUES (${placeholder(1, dialect)}, ${placeholder(2, dialect)})`,
       [migration.name, new Date()],
     );
   }
@@ -474,7 +483,11 @@ async function rollbackMigrations(
 ): Promise<string[]> {
   await ensureMigrationsTable(driver);
 
-  const executed = await driver.query(`SELECT name FROM \`${MIGRATIONS_TABLE}\` ORDER BY id DESC`);
+  const dialect = dialectName(driver.dialect);
+  const migrationsTable = quoteIdentifier(MIGRATIONS_TABLE, dialect);
+  const executed = await driver.query(
+    `SELECT ${quoteIdentifier("name", dialect)} FROM ${migrationsTable} ORDER BY ${quoteIdentifier("id", dialect)} DESC`,
+  );
   const executedNames = executed.map((r: any) => r.name as string);
 
   const ctx = createMigrationContext(driver, registry);
@@ -491,7 +504,10 @@ async function rollbackMigrations(
 
     await migration.down(ctx);
 
-    await driver.execute(`DELETE FROM \`${MIGRATIONS_TABLE}\` WHERE \`name\` = ?`, [name]);
+    await driver.execute(
+      `DELETE FROM ${migrationsTable} WHERE ${quoteIdentifier("name", dialect)} = ${placeholder(1, dialect)}`,
+      [name],
+    );
     rolledBack.push(name);
   }
 
