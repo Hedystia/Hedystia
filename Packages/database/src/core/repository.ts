@@ -6,6 +6,8 @@ import {
   compileSelect,
   compileUpdate,
   compileWhere,
+  dialectName,
+  quoteIdentifier,
 } from "../drivers/sql-compiler";
 import { QueryError } from "../errors";
 import type { SchemaRegistry } from "../schema";
@@ -267,12 +269,13 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
           : undefined;
 
         const params: unknown[] = [];
-        let sql = `SELECT COUNT(*) as count FROM \`${this.tableName}\``;
+        const dialect = dialectName(this.driver.dialect);
+        let sql = `SELECT COUNT(*) as count FROM ${quoteIdentifier(this.tableName, dialect)}`;
         if (dbWhere && Object.keys(dbWhere).length > 0) {
-          sql += ` WHERE ${compileWhere(dbWhere, params)}`;
+          sql += ` WHERE ${compileWhere(dbWhere, params, dialect)}`;
         }
         const rows = await this.driver.query(sql, params);
-        return rows[0]?.count ?? 0;
+        return Number(rows[0]?.count ?? 0);
       },
       this.tableCacheConfig,
     );
@@ -314,8 +317,7 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
    */
   async truncate(): Promise<void> {
     this.cache.invalidateTable(this.tableName);
-    const quote = (s: string) => (this.dialect === "postgres" ? `"${s}"` : `\`${s}\``);
-    await this.driver.execute(`DELETE FROM ${quote(this.tableName)}`);
+    await this.driver.execute(`DELETE FROM ${quoteIdentifier(this.tableName, this.dialect)}`);
   }
 
   private async findSQL(options?: QueryOptions<T>): Promise<T[]> {
@@ -498,21 +500,17 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
     options: QueryOptions,
   ): Promise<any[]> {
     const params: unknown[] = [];
-    const placeholders = ids.map(() => "?").join(", ");
-    params.push(...ids);
-
-    let sql = `SELECT * FROM \`${tableName}\` WHERE \`${column}\` IN (${placeholders})`;
-    if (options.orderBy) {
-      const orderParts = Object.entries(options.orderBy).map(
-        ([col, dir]) => `\`${col}\` ${(dir as string).toUpperCase()}`,
-      );
-      if (orderParts.length > 0) {
-        sql += ` ORDER BY ${orderParts.join(", ")}`;
-      }
-    }
-    if (options.take) {
-      sql += ` LIMIT ${options.take}`;
-    }
+    const dialect = dialectName(this.driver.dialect);
+    const sql = compileSelect(
+      tableName,
+      {
+        where: { [column]: { in: ids } },
+        orderBy: options.orderBy as Record<string, "asc" | "desc"> | undefined,
+        take: options.take,
+      },
+      params,
+      dialect,
+    );
 
     return this.driver.query(sql, params);
   }
