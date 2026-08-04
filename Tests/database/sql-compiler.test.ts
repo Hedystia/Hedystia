@@ -1,5 +1,6 @@
 import type { ColumnMetadata, TableMetadata } from "@hedystia/db";
 import {
+  compileBulkInsert,
   compileColumnDef,
   compileCreateTable,
   compileDelete,
@@ -155,6 +156,48 @@ describe("SQL Compiler", () => {
     });
   });
 
+  describe("dialect-specific placeholders", () => {
+    it("should use numbered placeholders for PostgreSQL WHERE clauses", () => {
+      const params: unknown[] = [];
+      const result = compileWhere(
+        { name: "Alice", id: { in: [1, 2] }, age: { between: [18, 65] } },
+        params,
+        "postgres",
+      );
+      expect(result).toBe('"name" = $1 AND "id" IN ($2, $3) AND "age" BETWEEN $4 AND $5');
+      expect(params).toEqual(["Alice", 1, 2, 18, 65]);
+    });
+
+    it("should keep question-mark placeholders for SQLite", () => {
+      const params: unknown[] = [];
+      const result = compileWhere({ name: "Alice", id: 2 }, params, "sqlite");
+      expect(result).toBe("`name` = ? AND `id` = ?");
+      expect(params).toEqual(["Alice", 2]);
+    });
+
+    it("should number placeholders across UPDATE SET and WHERE", () => {
+      const params: unknown[] = [];
+      const result = compileUpdate("users", { name: "Bob" }, { id: 7 }, params, "postgres");
+      expect(result).toBe('UPDATE "users" SET "name" = $1 WHERE "id" = $2');
+      expect(params).toEqual(["Bob", 7]);
+    });
+
+    it("should number placeholders across bulk INSERT rows", () => {
+      const params: unknown[] = [];
+      const result = compileBulkInsert(
+        "users",
+        [
+          { name: "Alice", age: 20 },
+          { name: "Bob", age: 21 },
+        ],
+        params,
+        "postgres",
+      );
+      expect(result).toBe('INSERT INTO "users" ("name", "age") VALUES ($1, $2), ($3, $4)');
+      expect(params).toEqual(["Alice", 20, "Bob", 21]);
+    });
+  });
+
   describe("compileWhere", () => {
     it("should compile simple equality", () => {
       const params: unknown[] = [];
@@ -243,6 +286,12 @@ describe("SQL Compiler", () => {
   });
 
   describe("compileInsert", () => {
+    it("should compile PostgreSQL identifiers and placeholders", () => {
+      const params: unknown[] = [];
+      const result = compileInsert("users", { name: "Alice", age: 20 }, params, "postgres");
+      expect(result).toBe('INSERT INTO "users" ("name", "age") VALUES ($1, $2)');
+      expect(params).toEqual(["Alice", 20]);
+    });
     it("should compile an insert statement", () => {
       const params: unknown[] = [];
       const result = compileInsert("users", { name: "Alice", email: "a@b.com" }, params);
