@@ -1,7 +1,7 @@
 import { DriverError } from "../errors";
 import type { ColumnMetadata, PostgreSQLConnectionConfig, TableMetadata } from "../types";
 import { BaseDriver } from "./driver";
-import { compileColumnDef, compileCreateTable } from "./sql-compiler";
+import { compileColumnDef, compileCreateTable, quoteIdentifier } from "./sql-compiler";
 
 interface PostgreSQLPool {
   query(sql: string, params?: any[]): Promise<any>;
@@ -198,6 +198,41 @@ export class PostgreSQLDriver extends BaseDriver {
    */
   async renameColumn(table: string, oldName: string, newName: string): Promise<void> {
     await this.execute(`ALTER TABLE "${table}" RENAME COLUMN "${oldName}" TO "${newName}"`);
+  }
+
+  /**
+   * Create an index on one or more columns.
+   *
+   * The generated index name follows `${table}_${columns.join("_")}_index`.
+   *
+   * @param {string} table - Table name
+   * @param {string[]} columns - Column names included in the index
+   * @param {boolean} [unique=false] - Whether the index should enforce uniqueness
+   * @returns {Promise<void>} Resolves after the index is created
+   * @throws {DriverError} If no columns are provided or PostgreSQL rejects the statement
+   */
+  async addIndex(table: string, columns: string[], unique = false): Promise<void> {
+    if (columns.length === 0) {
+      throw new DriverError("Index must contain at least one column");
+    }
+    const indexName = `${table}_${columns.join("_")}_index`;
+    const uniqueKeyword = unique ? "UNIQUE " : "";
+    const columnList = columns.map((column) => quoteIdentifier(column, "postgres")).join(", ");
+    await this.execute(
+      `CREATE ${uniqueKeyword}INDEX IF NOT EXISTS ${quoteIdentifier(indexName, "postgres")} ON ${quoteIdentifier(table, "postgres")} (${columnList})`,
+    );
+  }
+
+  /**
+   * Drop an index by name.
+   *
+   * @param {string} _table - Unused for PostgreSQL; retained for driver interface compatibility
+   * @param {string} indexName - Index name to drop
+   * @returns {Promise<void>} Resolves after the index is dropped
+   * @throws {DriverError} If PostgreSQL rejects the statement
+   */
+  async dropIndex(_table: string, indexName: string): Promise<void> {
+    await this.execute(`DROP INDEX IF EXISTS ${quoteIdentifier(indexName, "postgres")}`);
   }
 
   /**
