@@ -163,6 +163,31 @@ export class S3Driver extends BaseDriver {
     await this.flush(table);
   }
 
+  /**
+   * Reject index creation because S3 object storage has no database index engine.
+   *
+   * @param {string} _table - Table name
+   * @param {string[]} _columns - Column names requested for the index
+   * @param {boolean} [_unique=false] - Whether uniqueness was requested
+   * @returns {Promise<void>} Rejected promise because the operation is unsupported
+   * @throws {DriverError} Always, because S3 storage does not support indexes
+   */
+  async addIndex(_table: string, _columns: string[], _unique = false): Promise<void> {
+    throw new DriverError("Indexes are not supported by the S3 driver");
+  }
+
+  /**
+   * Reject index removal because S3 object storage has no database index engine.
+   *
+   * @param {string} _table - Table name
+   * @param {string} _indexName - Index name requested for removal
+   * @returns {Promise<void>} Rejected promise because the operation is unsupported
+   * @throws {DriverError} Always, because S3 storage does not support indexes
+   */
+  async dropIndex(_table: string, _indexName: string): Promise<void> {
+    throw new DriverError("Indexes are not supported by the S3 driver");
+  }
+
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
     const snapshot = new Map<string, string>();
     for (const [name, tableData] of this.data) {
