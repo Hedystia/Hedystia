@@ -179,6 +179,31 @@ export class FileDriver extends BaseDriver {
   }
 
   /**
+   * Reject index creation because JSON file storage has no database index engine.
+   *
+   * @param {string} _table - Table name
+   * @param {string[]} _columns - Column names requested for the index
+   * @param {boolean} [_unique=false] - Whether uniqueness was requested
+   * @returns {Promise<void>} Rejected promise because the operation is unsupported
+   * @throws {DriverError} Always, because file storage does not support indexes
+   */
+  async addIndex(_table: string, _columns: string[], _unique = false): Promise<void> {
+    throw new DriverError("Indexes are not supported by the file driver");
+  }
+
+  /**
+   * Reject index removal because JSON file storage has no database index engine.
+   *
+   * @param {string} _table - Table name
+   * @param {string} _indexName - Index name requested for removal
+   * @returns {Promise<void>} Rejected promise because the operation is unsupported
+   * @throws {DriverError} Always, because file storage does not support indexes
+   */
+  async dropIndex(_table: string, _indexName: string): Promise<void> {
+    throw new DriverError("Indexes are not supported by the file driver");
+  }
+
+  /**
    * Execute within a transaction (pseudo-transaction for file driver)
    * @param {() => Promise<T>} fn - Function to execute
    * @returns {Promise<T>} Result
