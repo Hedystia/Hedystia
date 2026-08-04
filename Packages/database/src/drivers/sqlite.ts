@@ -1,7 +1,7 @@
 import { DriverError } from "../errors";
 import type { ColumnMetadata, SQLiteConnectionConfig, TableMetadata } from "../types";
 import { BaseDriver } from "./driver";
-import { compileColumnDef, compileCreateTable } from "./sql-compiler";
+import { compileColumnDef, compileCreateTable, quoteIdentifier } from "./sql-compiler";
 
 /**
  * Interface for SQLite database adapters
@@ -316,6 +316,41 @@ export class SQLiteDriver extends BaseDriver {
    */
   async renameColumn(table: string, oldName: string, newName: string): Promise<void> {
     await this.execute(`ALTER TABLE \`${table}\` RENAME COLUMN \`${oldName}\` TO \`${newName}\``);
+  }
+
+  /**
+   * Create an index on one or more columns.
+   *
+   * The generated index name follows `${table}_${columns.join("_")}_index`.
+   *
+   * @param {string} table - Table name
+   * @param {string[]} columns - Column names included in the index
+   * @param {boolean} [unique=false] - Whether the index should enforce uniqueness
+   * @returns {Promise<void>} Resolves after the index is created
+   * @throws {DriverError} If no columns are provided or SQLite rejects the statement
+   */
+  async addIndex(table: string, columns: string[], unique = false): Promise<void> {
+    if (columns.length === 0) {
+      throw new DriverError("Index must contain at least one column");
+    }
+    const indexName = `${table}_${columns.join("_")}_index`;
+    const uniqueKeyword = unique ? "UNIQUE " : "";
+    const columnList = columns.map((column) => quoteIdentifier(column, "sqlite")).join(", ");
+    await this.execute(
+      `CREATE ${uniqueKeyword}INDEX IF NOT EXISTS ${quoteIdentifier(indexName, "sqlite")} ON ${quoteIdentifier(table, "sqlite")} (${columnList})`,
+    );
+  }
+
+  /**
+   * Drop an index by name.
+   *
+   * @param {string} _table - Unused for SQLite; retained for driver interface compatibility
+   * @param {string} indexName - Index name to drop
+   * @returns {Promise<void>} Resolves after the index is dropped
+   * @throws {DriverError} If SQLite rejects the statement
+   */
+  async dropIndex(_table: string, indexName: string): Promise<void> {
+    await this.execute(`DROP INDEX IF EXISTS ${quoteIdentifier(indexName, "sqlite")}`);
   }
 
   /**
