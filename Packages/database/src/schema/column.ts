@@ -6,17 +6,20 @@ import type { ColumnDataType, ColumnMetadata, DeferredRefMeta, ReferenceAction }
  * @template TN - The table name this column belongs to (set by table())
  * @template CN - The column name (set by table())
  * @template Ref - The deferred reference metadata (set by references())
+ * @template AutoIncrement - Whether this column is auto-incrementing
  */
 export class ColumnBuilder<
   T = unknown,
   TN extends string = string,
   CN extends string = string,
   Ref extends DeferredRefMeta = never,
+  AutoIncrement extends boolean = false,
 > {
   declare readonly __type: T;
   declare readonly __tableName: TN;
   declare readonly __columnName: CN;
   declare readonly __ref: Ref;
+  declare readonly __autoIncrement: AutoIncrement;
   private _type: ColumnDataType;
   private _primaryKey = false;
   private _autoIncrement = false;
@@ -44,12 +47,12 @@ export class ColumnBuilder<
   /**
    * Set a custom database column name different from the property key
    * @param {string} alias - The column name to use in the database
-   * @returns {ColumnBuilder<T, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    * @example
    * // In code: guildId, In database: guild_id
    * guildId: varchar(255).name("guild_id")
    */
-  name(alias: string): ColumnBuilder<T, TN, CN, Ref> {
+  name(alias: string): ColumnBuilder<T, TN, CN, Ref, AutoIncrement> {
     this._columnAlias = alias;
     return this;
   }
@@ -57,74 +60,74 @@ export class ColumnBuilder<
   /**
    * Override the TypeScript type for this column with a custom type literal
    * @template U - The custom type to use
-   * @returns {ColumnBuilder<U, TN, CN, Ref>} The column builder with the new type
+   * @returns {ColumnBuilder<U, TN, CN, Ref, AutoIncrement>} The column builder with the new type
    * @example
    * // Limits autocomplete to specific values
    * locale: varchar(25).type<"en_US" | "es_ES">()
    */
-  type<U>(): ColumnBuilder<U, TN, CN, Ref> {
-    return this as unknown as ColumnBuilder<U, TN, CN, Ref>;
+  type<U>(): ColumnBuilder<U, TN, CN, Ref, AutoIncrement> {
+    return this as unknown as ColumnBuilder<U, TN, CN, Ref, AutoIncrement>;
   }
 
   /**
    * Mark this column as a primary key
-   * @returns {ColumnBuilder<T, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  primaryKey(): ColumnBuilder<T, TN, CN, Ref> {
+  primaryKey(): ColumnBuilder<T, TN, CN, Ref, AutoIncrement> {
     this._primaryKey = true;
     return this;
   }
 
   /**
    * Mark this column as auto-incrementing
-   * @returns {ColumnBuilder<T, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, Ref, true>} The column builder marked as auto-incrementing
    */
-  autoIncrement(): ColumnBuilder<T, TN, CN, Ref> {
+  autoIncrement(): ColumnBuilder<T, TN, CN, Ref, true> {
     this._autoIncrement = true;
-    return this;
+    return this as unknown as ColumnBuilder<T, TN, CN, Ref, true>;
   }
 
   /**
    * Mark this column as NOT NULL
-   * @returns {ColumnBuilder<NonNullable<T>, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<NonNullable<T>, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  notNull(): ColumnBuilder<NonNullable<T>, TN, CN, Ref> {
+  notNull(): ColumnBuilder<NonNullable<T>, TN, CN, Ref, AutoIncrement> {
     this._notNull = true;
-    return this as unknown as ColumnBuilder<NonNullable<T>, TN, CN, Ref>;
+    return this as unknown as ColumnBuilder<NonNullable<T>, TN, CN, Ref, AutoIncrement>;
   }
 
   /**
    * Mark this column as nullable
-   * @returns {ColumnBuilder<T | null, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T | null, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  nullable(): ColumnBuilder<T | null, TN, CN, Ref> {
+  nullable(): ColumnBuilder<T | null, TN, CN, Ref, AutoIncrement> {
     this._notNull = false;
-    return this as unknown as ColumnBuilder<T | null, TN, CN, Ref>;
+    return this as unknown as ColumnBuilder<T | null, TN, CN, Ref, AutoIncrement>;
   }
 
   /**
    * Mark this column as nullable (alias for {@link nullable})
-   * @returns {ColumnBuilder<T | null, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T | null, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  null(): ColumnBuilder<T | null, TN, CN, Ref> {
+  null(): ColumnBuilder<T | null, TN, CN, Ref, AutoIncrement> {
     return this.nullable();
   }
 
   /**
    * Set a default value for this column
    * @param {T} value - The default value
-   * @returns {ColumnBuilder<T, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  default(value: T): ColumnBuilder<T, TN, CN, Ref> {
+  default(value: T): ColumnBuilder<T, TN, CN, Ref, AutoIncrement> {
     this._defaultValue = value;
     return this;
   }
 
   /**
    * Mark this column as having a unique constraint
-   * @returns {ColumnBuilder<T, TN, CN, Ref>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, Ref, AutoIncrement>} The column builder for chaining
    */
-  unique(): ColumnBuilder<T, TN, CN, Ref> {
+  unique(): ColumnBuilder<T, TN, CN, Ref, AutoIncrement> {
     this._unique = true;
     return this;
   }
@@ -136,10 +139,10 @@ export class ColumnBuilder<
    * @param {ReferenceAction} [options.onDelete] - Action on delete
    * @param {ReferenceAction} [options.onUpdate] - Action on update
    * @param {string} [options.relationName] - Name for the relation
-   * @returns {ColumnBuilder<T>} The column builder for chaining
+   * @returns {ColumnBuilder<T, TN, CN, DeferredRefMeta<CN, R["__tableName"], R["__columnName"], O extends { relationName: infer N extends string } ? N : undefined>, AutoIncrement>} The column builder with resolved reference metadata
    */
   references<
-    R extends ColumnBuilder<any, string, string, any>,
+    R extends ColumnBuilder<any, string, string, any, boolean>,
     O extends {
       onDelete?: ReferenceAction;
       onUpdate?: ReferenceAction;
@@ -157,7 +160,8 @@ export class ColumnBuilder<
       R["__tableName"],
       R["__columnName"],
       O extends { relationName: infer N extends string } ? N : undefined
-    >
+    >,
+    AutoIncrement
   > {
     this._references = {
       resolve: () => {
