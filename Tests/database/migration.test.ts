@@ -266,6 +266,51 @@ describe("migrateDown", () => {
   });
 });
 
+describe("Migration indexes", () => {
+  const INDEX_DB = "/tmp/hedystia_test_migration_index.db";
+  const cleanup = () => {
+    for (const file of [INDEX_DB, `${INDEX_DB}-shm`, `${INDEX_DB}-wal`]) {
+      if (existsSync(file)) {
+        rmSync(file);
+      }
+    }
+  };
+
+  beforeAll(cleanup);
+  afterAll(cleanup);
+
+  it("should create and drop an index through migration context", async () => {
+    const addEmailIndex = migration("add_users_email_index", {
+      async up({ schema }) {
+        await schema.addIndex("users", ["email"], true);
+      },
+      async down({ schema }) {
+        await schema.dropIndex("users", "users_email_index");
+      },
+    });
+    const db = database({
+      schemas: [users],
+      database: "sqlite",
+      connection: { filename: INDEX_DB },
+      syncSchemas: true,
+      runMigrations: true,
+      migrations: [addEmailIndex],
+      cache: false,
+    });
+
+    await db.initialize();
+    const created = await db.raw("PRAGMA index_list(`users`)");
+    expect(created.some((index) => index.name === "users_email_index")).toBe(true);
+
+    const rolledBack = await db.migrateDown();
+    expect(rolledBack).toEqual(["add_users_email_index"]);
+    const dropped = await db.raw("PRAGMA index_list(`users`)");
+    expect(dropped.some((index) => index.name === "users_email_index")).toBe(false);
+
+    await db.close();
+  });
+});
+
 describe("Connection array selection", () => {
   const cleanup = () => {
     for (const f of [TEST_DB_CONN, `${TEST_DB_CONN}-shm`, `${TEST_DB_CONN}-wal`]) {
