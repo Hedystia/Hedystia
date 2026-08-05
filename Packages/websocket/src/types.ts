@@ -14,7 +14,7 @@ export type WSMessage = string | ArrayBuffer | Uint8Array;
  * @typeParam K - String key
  * @typeParam V - Stored value
  */
-export type WSData = Record<string, any>;
+export type WSData = object;
 
 /**
  * The per-connection wrapper passed to every handler.
@@ -135,7 +135,7 @@ export type Compressor =
  */
 export type PerMessageDeflate =
   | boolean
-  | (Record<string, any> & {
+  | (Record<string, unknown> & {
       compress?: boolean | Compressor;
       decompress?: boolean | Compressor;
     });
@@ -164,7 +164,7 @@ export interface WebSocketServerOptions {
    *
    * Receives the raw HTTP request (IncomingMessage on Node, Request on Bun).
    */
-  resolveData?: (req: any) => Record<string, any>;
+  resolveData?: (req: WebSocketRequest) => Record<string, unknown>;
 }
 
 /**
@@ -208,6 +208,23 @@ export interface ClientWebSocketOptions {
 }
 
 /**
+ * Minimal request shape exposed to runtime data resolvers.
+ *
+ * @remarks
+ * The shape is intentionally structural so Node's `IncomingMessage`, Bun's
+ * `Request`, and compatible runtime request objects can be passed without a
+ * package-specific adapter.
+ */
+export interface WebSocketRequest {
+  /** Request URL, absolute or relative to the active server. */
+  url?: string;
+  /** Request headers from the active runtime. */
+  headers?: Headers | Record<string, string | string[] | undefined>;
+  /** Optional underlying socket metadata. */
+  socket?: { remoteAddress?: string };
+}
+
+/**
  * Raw upgrade tuple consumed by {@link WebSocketServer.upgrade}.
  *
  * @remarks
@@ -215,9 +232,9 @@ export interface ClientWebSocketOptions {
  */
 export interface UpgradeRequest {
   /** Raw `IncomingMessage`-like object exposing `headers`, `method`, `url`. */
-  rawRequest: any;
+  rawRequest: WebSocketRequest & { method?: string };
   /** Raw duplex socket (e.g. `node:net.Socket`). */
-  socket: any;
+  socket: import("node:stream").Duplex;
   /** Initial buffer captured by the HTTP parser. */
   head: Buffer | Uint8Array;
 }
