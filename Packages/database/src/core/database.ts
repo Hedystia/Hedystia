@@ -10,6 +10,7 @@ import type {
   DatabaseConfig,
   DatabaseDriver,
   DeleteOptions,
+  InferInsert,
   InferRow,
   MigrationDefinition,
   QueryOptions,
@@ -54,14 +55,14 @@ type TypedTableRepository<S, T extends AnyTableDef> = {
    * @param data - Row data (or array of row data) to insert
    * @returns The inserted row
    */
-  insert(data: Partial<InferRow<T>> | Partial<InferRow<T>>[]): Promise<InferRow<T>>;
+  insert(data: InferInsert<T>): Promise<InferRow<T>>;
 
   /**
    * Insert multiple rows into the table
    * @param data - Array of row data to insert
    * @returns Array of inserted rows
    */
-  insertMany(data: Partial<InferRow<T>>[]): Promise<InferRow<T>[]>;
+  insertMany(data: InferInsert<T>[]): Promise<InferRow<T>[]>;
 
   /**
    * Update rows matching the where clause
@@ -98,7 +99,7 @@ type TypedTableRepository<S, T extends AnyTableDef> = {
    */
   upsert(options: {
     where: WhereClause<InferRow<T>>;
-    create: Partial<InferRow<T>>;
+    create: InferInsert<T>;
     update: Partial<InferRow<T>>;
   }): Promise<InferRow<T>>;
 
@@ -416,8 +417,8 @@ function createMigrationContext(
       dropTable: async (name: string) => {
         await driver.dropTable(name);
       },
-      addColumn: async (table: string, _name: string, column: any) => {
-        await driver.addColumn(table, column);
+      addColumn: async (table: string, name: string, column: import("../types").ColumnMetadata) => {
+        await driver.addColumn(table, { ...column, name: column.name || name });
       },
       dropColumn: async (table: string, name: string) => {
         await driver.dropColumn(table, name);
@@ -450,29 +451,35 @@ async function runMigrations(
   registry: SchemaRegistry,
   migrations: MigrationDefinition[],
 ): Promise<void> {
-  await ensureMigrationsTable(driver);
+  const names = migrations.map((migration) => migration.name);
+  if (new Set(names).size !== names.length) {
+    throw new DatabaseError("Migration names must be unique");
+  }
 
   const dialect = dialectName(driver.dialect);
   const migrationsTable = quoteIdentifier(MIGRATIONS_TABLE, dialect);
-  const executed = await driver.query(
-    `SELECT ${quoteIdentifier("name", dialect)} FROM ${migrationsTable}`,
-  );
-  const executedNames = new Set(executed.map((r: any) => r.name));
 
-  const ctx = createMigrationContext(driver, registry);
-
-  for (const migration of migrations) {
-    if (executedNames.has(migration.name)) {
-      continue;
-    }
-
-    await migration.up(ctx);
-
-    await driver.execute(
-      `INSERT INTO ${migrationsTable} (${quoteIdentifier("name", dialect)}, ${quoteIdentifier("executed_at", dialect)}) VALUES (${placeholder(1, dialect)}, ${placeholder(2, dialect)})`,
-      [migration.name, new Date()],
+  await driver.transaction(async () => {
+    await ensureMigrationsTable(driver);
+    const executed = await driver.query(
+      `SELECT ${quoteIdentifier("name", dialect)} FROM ${migrationsTable}`,
     );
-  }
+    const executedNames = new Set(executed.map((r: any) => r.name));
+    const ctx = createMigrationContext(driver, registry);
+
+    for (const migration of migrations) {
+      if (executedNames.has(migration.name)) {
+        continue;
+      }
+
+      await migration.up(ctx);
+      await driver.execute(
+        `INSERT INTO ${migrationsTable} (${quoteIdentifier("name", dialect)}, ${quoteIdentifier("executed_at", dialect)}) VALUES (${placeholder(1, dialect)}, ${placeholder(2, dialect)})`,
+        [migration.name, new Date()],
+      );
+      executedNames.add(migration.name);
+    }
+  });
 }
 
 async function rollbackMigrations(
@@ -502,12 +509,14 @@ async function rollbackMigrations(
       continue;
     }
 
-    await migration.down(ctx);
+    await driver.transaction(async () => {
+      await migration.down(ctx);
 
-    await driver.execute(
-      `DELETE FROM ${migrationsTable} WHERE ${quoteIdentifier("name", dialect)} = ${placeholder(1, dialect)}`,
-      [name],
-    );
+      await driver.execute(
+        `DELETE FROM ${migrationsTable} WHERE ${quoteIdentifier("name", dialect)} = ${placeholder(1, dialect)}`,
+        [name],
+      );
+    });
     rolledBack.push(name);
   }
 
