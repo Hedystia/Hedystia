@@ -78,8 +78,12 @@ export class PostgreSQLDriver extends BaseDriver {
     try {
       const executor = this.transactionClient ?? this.getPool();
       const result = await executor.query(sql, this.formatParams(params));
+      const returnedIds = Array.isArray(result.rows)
+        ? result.rows.map((row: Record<string, unknown>) => Object.values(row)[0])
+        : [];
       return {
-        insertId: result.insertId,
+        insertId: returnedIds[0] ?? result.insertId,
+        insertIds: returnedIds,
         affectedRows: result.rowCount,
       };
     } catch (err: any) {
