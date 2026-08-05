@@ -1,38 +1,101 @@
+import { SecurityInputError } from "../security";
+
 export type { DebugLevel } from "./debug";
 export { createLogger } from "./debug";
 
-export async function parseRequestBody(req: Request): Promise<any> {
+async function readLimitedBytes(req: Request, maxBytes: number): Promise<Uint8Array> {
+  const reader = req.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (bytes.byteLength > maxBytes) {
+      throw new SecurityInputError("Request body exceeds the maximum allowed size", 413);
+    }
+    return bytes;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new SecurityInputError("Request body exceeds the maximum allowed size", 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function readLimitedText(req: Request, maxBytes?: number): Promise<string> {
+  if (maxBytes === undefined) {
+    return await req.text();
+  }
+  return new TextDecoder().decode(await readLimitedBytes(req, maxBytes));
+}
+
+export async function limitRequestBody(req: Request, maxBytes: number): Promise<Request> {
+  const bytes = await readLimitedBytes(req.clone(), maxBytes);
+  const headers = new Headers(req.headers);
+  headers.delete("content-length");
+  return new Request(req.url, {
+    body: bytes,
+    headers,
+    method: req.method,
+  });
+}
+
+export async function parseRequestBody(req: Request, maxBytes?: number): Promise<any> {
   const contentType = (req.headers.get("Content-Type") || "").toLowerCase();
+  const contentLength = req.headers.get("content-length");
+  if (maxBytes !== undefined && contentLength && Number(contentLength) > maxBytes) {
+    throw new SecurityInputError("Request body exceeds the maximum allowed size");
+  }
 
   if (!contentType) {
-    return req.text();
+    return readLimitedText(req, maxBytes);
   }
 
   if (contentType.includes("application/json")) {
-    return await req.json();
+    const text = await readLimitedText(req, maxBytes);
+    return text === "" ? undefined : JSON.parse(text);
   }
   if (contentType.includes("application/x-www-form-urlencoded")) {
-    const text = await req.text();
+    const text = await readLimitedText(req, maxBytes);
     const params = new URLSearchParams(text);
     return Object.fromEntries(params.entries());
   }
   if (contentType.includes("multipart/form-data")) {
-    const formData = await req.formData();
-    const obj: Record<string, any> = {};
-    formData.forEach((value, key) => {
-      if (obj[key]) {
-        if (Array.isArray(obj[key])) {
-          obj[key].push(value);
-        } else {
-          obj[key] = [obj[key], value];
-        }
-      } else {
-        obj[key] = value;
-      }
+    if (maxBytes === undefined) {
+      return await req.formData();
+    }
+    const bytes = await readLimitedBytes(req, maxBytes);
+    const limitedRequest = new Request(req.url, {
+      body: bytes,
+      headers: (() => {
+        const headers = new Headers(req.headers);
+        headers.delete("content-length");
+        return headers;
+      })(),
+      method: req.method,
     });
-    return obj;
+    return await limitedRequest.formData();
   }
-  return await req.text();
+  return await readLimitedText(req, maxBytes);
 }
 
 export function isBunHTMLBundle(obj: any): obj is { index: string } {
