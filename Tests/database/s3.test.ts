@@ -16,6 +16,8 @@ const posts = table("hedystia_test_posts", {
   title: varchar(255).notNull(),
 });
 
+const isCI = !!process.env.CI;
+
 describe("S3 Driver", () => {
   let initialized = false;
 
@@ -46,6 +48,9 @@ describe("S3 Driver", () => {
       } catch (err: any) {
         retries--;
         if (retries === 0) {
+          if (isCI) {
+            throw err;
+          }
           console.warn("S3 driver test skipped:", err.message);
         } else {
           await new Promise((resolve) => setTimeout(resolve, 2000));
