@@ -3,6 +3,8 @@ import { BaseSchema } from "../core/base";
 import type { CombinedStandardProps, Schema } from "../core/types";
 
 export class DefaultSchema<I, O> extends BaseSchema<I, O> {
+  /** Marker used by object schemas and type inference to identify defaulted fields. */
+  readonly _isDefault = true;
   private readonly innerSchema: Schema<I, O>;
   private readonly defaultValue: O | (() => O);
 
