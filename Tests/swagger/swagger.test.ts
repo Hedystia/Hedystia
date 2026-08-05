@@ -111,11 +111,11 @@ describe("Swagger Plugin", () => {
     const spec = swaggerInstance.getSpec() as any;
 
     expect(spec.paths["/ws"]).toBeDefined();
-    expect(spec.paths["/ws"].ws).toBeDefined();
+    expect(spec.paths["/ws"]["x-hedystia-websocket"]).toBeDefined();
 
     expect(spec.paths["/sub"]).toBeDefined();
-    expect(spec.paths["/sub"].sub).toBeDefined();
-    expect(spec.paths["/sub"].sub.summary).toBe("Test subscription");
+    expect(spec.paths["/sub"]["x-hedystia-subscription"]).toBeDefined();
+    expect(spec.paths["/sub"]["x-hedystia-subscription"].summary).toBe("Test subscription");
   });
 
   it("should validate spec using validate method", async () => {
