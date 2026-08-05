@@ -193,14 +193,34 @@ export class S3Driver extends BaseDriver {
     for (const [name, tableData] of this.data) {
       snapshot.set(name, JSON.stringify(tableData));
     }
+
     try {
       const result = await fn();
       await this.flushAll();
       return result;
     } catch (err) {
+      const currentNames = new Set(this.data.keys());
+      this.data.clear();
       for (const [name, json] of snapshot) {
-        this.data.set(name, JSON.parse(json));
+        this.data.set(name, JSON.parse(json) as S3TableData);
       }
+
+      for (const name of currentNames) {
+        if (!snapshot.has(name)) {
+          try {
+            const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+            await this.client.send(
+              new DeleteObjectCommand({
+                Bucket: this.config.bucket,
+                Key: this.getKey(name),
+              }),
+            );
+          } catch {
+            // Preserve the original transaction error.
+          }
+        }
+      }
+      await this.flushAll();
       throw err;
     }
   }
