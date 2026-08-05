@@ -6,6 +6,7 @@ import type {
   UpgradeOptions,
   UpgradeRequest,
   WebSocketHandlers,
+  WebSocketRequest,
   WebSocketServerOptions,
   WSData,
   WSMessage,
@@ -16,6 +17,7 @@ export type {
   UpgradeOptions,
   UpgradeRequest,
   WebSocketHandlers,
+  WebSocketRequest,
   WebSocketServerOptions,
   WSData,
   WSMessage,
@@ -348,10 +350,10 @@ class NativeSocket {
 export class WebSocketServer<Data extends WSData = WSData> {
   private readonly handlers: WebSocketHandlers<Data>;
   private readonly maxPayload: number | undefined;
-  private readonly resolveData: ((req: any) => Record<string, any>) | undefined;
-  private readonly topics = new Map<string, Set<any>>();
+  private readonly resolveData: ((req: WebSocketRequest) => Record<string, unknown>) | undefined;
+  private readonly topics = new Map<string, Set<NativeSocket>>();
   private readonly socketTopics = new WeakMap<object, Set<string>>();
-  private readonly allSockets = new Set<any>();
+  private readonly allSockets = new Set<NativeSocket>();
 
   /**
    * Build a new WebSocket server.
@@ -600,7 +602,7 @@ export class WebSocketServer<Data extends WSData = WSData> {
    *
    * @internal
    */
-  private cleanup(native: any): void {
+  private cleanup(native: NativeSocket): void {
     const owned = this.socketTopics.get(native);
     if (owned) {
       for (const topic of owned) {
@@ -622,7 +624,7 @@ export class WebSocketServer<Data extends WSData = WSData> {
    *
    * @internal
    */
-  private wrap(native: NativeSocket, data: Data, rawReq: any): ServerWebSocket<Data> {
+  private wrap(native: NativeSocket, data: Data, rawReq: WebSocketRequest): ServerWebSocket<Data> {
     const remoteAddress: string =
       (rawReq?.socket?.remoteAddress as string) ||
       (rawReq?.headers?.["x-forwarded-for"] as string) ||
