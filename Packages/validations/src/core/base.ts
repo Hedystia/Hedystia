@@ -1,5 +1,9 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type { CombinedStandardProps, Schema } from "./types";
+import type { CombinedStandardProps, Result, Schema } from "./types";
+
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof value === "object" && value !== null && "then" in value;
+}
 
 export abstract class BaseSchema<I, O> implements Schema<I, O> {
   abstract get ["~standard"](): CombinedStandardProps<I, O>;
@@ -100,7 +104,7 @@ export abstract class BaseSchema<I, O> implements Schema<I, O> {
    * @param {unknown} value Value to validate.
    * @returns {Result<O> | Promise<Result<O>>} Validation result.
    */
-  safeParse(value: unknown): any {
+  safeParse(value: unknown): Result<O> | Promise<Result<O>> {
     return this["~standard"].validate(value);
   }
 }
@@ -224,17 +228,36 @@ export class UnionSchema<I, O> extends BaseSchema<I, O> {
         output: () => this.jsonSchema,
       },
       validate: (value: unknown) => {
-        const issuesAccum: StandardSchemaV1.Issue[] = [];
-        for (const schema of this.schemas) {
-          const result = schema["~standard"].validate(value) as StandardSchemaV1.Result<any>;
-          if (!("issues" in result)) {
-            return { value: result.value };
+        const validateFrom = (
+          index: number,
+          issues: StandardSchemaV1.Issue[],
+        ): StandardSchemaV1.Result<O> | Promise<StandardSchemaV1.Result<O>> => {
+          for (let i = index; i < this.schemas.length; i++) {
+            const result = this.schemas[i]!["~standard"].validate(value) as
+              | StandardSchemaV1.Result<O>
+              | Promise<StandardSchemaV1.Result<O>>;
+            if (isPromiseLike(result)) {
+              return result.then((resolved) => {
+                if (!("issues" in resolved)) {
+                  return { value: resolved.value };
+                }
+                if (resolved.issues) {
+                  issues.push(...resolved.issues);
+                }
+                return validateFrom(i + 1, issues);
+              });
+            }
+            if (!("issues" in result)) {
+              return { value: result.value };
+            }
+            if (result.issues) {
+              issues.push(...result.issues);
+            }
           }
-          if (result.issues) {
-            issuesAccum.push(...result.issues);
-          }
-        }
-        return { issues: issuesAccum };
+          return { issues };
+        };
+
+        return validateFrom(0, []);
       },
       types: {
         input: {} as I,
@@ -321,31 +344,36 @@ export class ArraySchema<I, O extends any[]> extends BaseSchema<I, O> {
         }
 
         const results = value.map((item, index) => {
-          const result = this.innerSchema["~standard"].validate(item) as StandardSchemaV1.Result<
-            O[number]
-          >;
-          if ("issues" in result) {
-            return {
-              index,
-              issues: result.issues?.map((issue) => ({
-                ...issue,
-                path: issue.path ? [index, ...issue.path] : [index],
-              })),
-            };
-          }
-          return { index, value: result.value };
+          const mapResult = (result: StandardSchemaV1.Result<O[number]>) => {
+            if ("issues" in result) {
+              return {
+                issues: result.issues?.map((issue) => ({
+                  ...issue,
+                  path: issue.path ? [index, ...issue.path] : [index],
+                })),
+              };
+            }
+            return { value: result.value };
+          };
+          const result = this.innerSchema["~standard"].validate(item) as
+            | StandardSchemaV1.Result<O[number]>
+            | Promise<StandardSchemaV1.Result<O[number]>>;
+          return isPromiseLike(result) ? result.then(mapResult) : mapResult(result);
         });
 
-        const errors = results.filter((r) => "issues" in r) as {
-          index: number;
-          issues: StandardSchemaV1.Issue[];
-        }[];
+        const finish = (
+          resolved: Array<{ value?: O[number]; issues?: StandardSchemaV1.Issue[] }>,
+        ) => {
+          const issues = resolved.flatMap((result) => result.issues ?? []);
+          if (issues.length > 0) {
+            return { issues };
+          }
+          return { value: resolved.map((result) => result.value) as O };
+        };
 
-        if (errors.length > 0) {
-          return { issues: errors.flatMap((e) => e.issues) };
-        }
-
-        return { value: results.map((r) => ("value" in r ? r.value : null)) as O };
+        return results.some(isPromiseLike)
+          ? Promise.all(results).then(finish)
+          : finish(results as Array<{ value?: O[number]; issues?: StandardSchemaV1.Issue[] }>);
       },
       types: {
         input: {} as I,
@@ -383,7 +411,9 @@ export class InstanceOfSchema<I, O> extends BaseSchema<I, O> {
           };
         }
         const result = this.innerSchema["~standard"].validate(value);
-        return result as StandardSchemaV1.Result<O>;
+        return isPromiseLike(result)
+          ? result.then((resolved) => resolved as StandardSchemaV1.Result<O>)
+          : (result as StandardSchemaV1.Result<O>);
       },
       types: {
         input: {} as I,
@@ -404,6 +434,9 @@ export function validatePrimitive(
     return true;
   }
   if (typeof value === "boolean" && schema === "boolean") {
+    return true;
+  }
+  if (schema === "any") {
     return true;
   }
   return false;
