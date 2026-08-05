@@ -27,6 +27,7 @@ export class MySQLDriver extends BaseDriver {
   private pool: MySQLPool | null = null;
   private config: MySQLConnectionConfig;
   private provider?: "mysql" | "mysql2";
+  private transactionConnection: MySQLConnection | null = null;
 
   constructor(config: MySQLConnectionConfig, provider?: "mysql" | "mysql2") {
     super();
@@ -172,7 +173,8 @@ export class MySQLDriver extends BaseDriver {
    */
   async execute(sql: string, params: unknown[] = []): Promise<any> {
     try {
-      const [result] = await this.getPool().query(sql, this.formatParams(params));
+      const executor = this.transactionConnection ?? this.getPool();
+      const [result] = await executor.query(sql, this.formatParams(params));
       return {
         insertId: result.insertId,
         affectedRows: result.affectedRows,
@@ -190,7 +192,8 @@ export class MySQLDriver extends BaseDriver {
    */
   async query(sql: string, params: unknown[] = []): Promise<any[]> {
     try {
-      const [rows] = await this.getPool().query(sql, this.formatParams(params));
+      const executor = this.transactionConnection ?? this.getPool();
+      const [rows] = await executor.query(sql, this.formatParams(params));
       return rows as any[];
     } catch (err: any) {
       throw new DriverError(`MySQL query error: ${err.message}`);
@@ -329,7 +332,12 @@ export class MySQLDriver extends BaseDriver {
    * @returns {Promise<T>} Result
    */
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.transactionConnection) {
+      throw new DriverError("Nested transactions are not supported by the MySQL driver");
+    }
+
     const conn = await this.getPool().getConnection();
+    this.transactionConnection = conn;
     try {
       await conn.beginTransaction();
       const result = await fn();
@@ -339,6 +347,7 @@ export class MySQLDriver extends BaseDriver {
       await conn.rollback();
       throw err;
     } finally {
+      this.transactionConnection = null;
       conn.release();
     }
   }
