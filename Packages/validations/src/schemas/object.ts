@@ -2,6 +2,10 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { BaseSchema, OptionalSchema, validatePrimitive } from "../core/base";
 import type { CombinedStandardProps, SchemaDefinition, SchemaPrimitive } from "../core/types";
 
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof value === "object" && value !== null && "then" in value;
+}
+
 export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSchema<unknown, T> {
   readonly definition: SchemaDefinition;
   private _strict = false;
@@ -21,7 +25,8 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
       const schemaItem = this.definition[key];
       const isOptional = schemaItem instanceof OptionalSchema;
 
-      if (!isOptional) {
+      const hasDefault = schemaItem instanceof BaseSchema && "_isDefault" in schemaItem;
+      if (!isOptional && !hasDefault) {
         required.push(key);
       }
 
@@ -30,7 +35,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
       } else if (schemaItem instanceof BaseSchema) {
         properties[key] = schemaItem.jsonSchema;
       } else if (typeof schemaItem === "object" && schemaItem !== null) {
-        properties[key] = { type: "object", properties: {} };
+        properties[key] = new ObjectSchemaType(schemaItem as SchemaDefinition).jsonSchema;
       }
     }
 
@@ -152,63 +157,89 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
         const result: Record<string, unknown> = {};
         const issues: StandardSchemaV1.Issue[] = [];
 
+        const pending: Promise<void>[] = [];
+
+        const appendResult = (key: string, validated: StandardSchemaV1.Result<unknown>): void => {
+          if ("issues" in validated) {
+            issues.push(
+              ...(validated.issues ?? []).map((issue) => ({
+                ...issue,
+                path: issue.path ? [key, ...issue.path] : [key],
+              })),
+            );
+          } else {
+            result[key] = validated.value;
+          }
+        };
+
         for (const key in this.definition) {
           const schemaItem = this.definition[key];
           const isOptional = schemaItem instanceof OptionalSchema;
+          const hasDefault = schemaItem instanceof BaseSchema && "_isDefault" in schemaItem;
 
-          if (!(key in obj) && !isOptional) {
+          if (!(key in obj) && !isOptional && !hasDefault) {
             issues.push({ message: `Missing required property: ${key}`, path: [key] });
             continue;
           }
 
-          if (key in obj) {
-            if (typeof schemaItem === "string") {
-              const sp = schemaItem as SchemaPrimitive;
-              if (!validatePrimitive(sp, obj[key])) {
-                issues.push({
-                  message: `Invalid type for property ${key}: expected ${sp}`,
-                  path: [key],
-                });
-              } else {
+          if (!(key in obj) && !hasDefault) {
+            continue;
+          }
+
+          const input = key in obj ? obj[key] : undefined;
+          if (typeof schemaItem === "string") {
+            const sp = schemaItem as SchemaPrimitive;
+            if (!validatePrimitive(sp, input)) {
+              issues.push({
+                message: `Invalid type for property ${key}: expected ${sp}`,
+                path: [key],
+              });
+            } else {
+              result[key] = input;
+            }
+          } else if (schemaItem instanceof BaseSchema) {
+            const validated = schemaItem["~standard"].validate(input) as
+              | StandardSchemaV1.Result<unknown>
+              | Promise<StandardSchemaV1.Result<unknown>>;
+            if (isPromiseLike(validated)) {
+              pending.push(validated.then((resolved) => appendResult(key, resolved)));
+            } else {
+              appendResult(key, validated);
+            }
+          } else if (typeof schemaItem === "object" && schemaItem !== null) {
+            const nested = new ObjectSchemaType(schemaItem as SchemaDefinition);
+            const validated = nested["~standard"].validate(input);
+            if (isPromiseLike(validated)) {
+              pending.push(validated.then((resolved) => appendResult(key, resolved)));
+            } else {
+              appendResult(key, validated);
+            }
+          }
+        }
+
+        const finish = () => {
+          if (this._strict) {
+            for (const key of Object.keys(obj)) {
+              if (!(key in this.definition)) {
+                issues.push({ message: `Unknown key: ${key}`, path: [key] });
+              }
+            }
+          } else if (this._passthrough) {
+            for (const key of Object.keys(obj)) {
+              if (!(key in this.definition)) {
                 result[key] = obj[key];
               }
-            } else if (schemaItem instanceof BaseSchema) {
-              const r = schemaItem["~standard"].validate(obj[key]) as StandardSchemaV1.Result<any>;
-              if ("issues" in r) {
-                if (r.issues) {
-                  issues.push(
-                    ...r.issues.map((i) => ({
-                      ...i,
-                      path: i.path ? [key, ...i.path] : [key],
-                    })),
-                  );
-                }
-              } else {
-                result[key] = r.value;
-              }
             }
           }
-        }
 
-        if (this._strict) {
-          for (const key of Object.keys(obj)) {
-            if (!(key in this.definition)) {
-              issues.push({ message: `Unknown key: ${key}`, path: [key] });
-            }
+          if (issues.length > 0) {
+            return { issues };
           }
-        } else if (this._passthrough) {
-          for (const key of Object.keys(obj)) {
-            if (!(key in this.definition)) {
-              result[key] = obj[key];
-            }
-          }
-        }
 
-        if (issues.length > 0) {
-          return { issues };
-        }
+          return { value: result as T };
+        };
 
-        return { value: result as T };
+        return pending.length > 0 ? Promise.all(pending).then(finish) : finish();
       },
       types: {
         input: {} as unknown,
