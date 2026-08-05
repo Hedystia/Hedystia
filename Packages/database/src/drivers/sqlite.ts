@@ -25,6 +25,7 @@ export class SQLiteDriver extends BaseDriver {
   private db: SQLiteAdapter | null = null;
   private config: SQLiteConnectionConfig;
   private provider?: "better-sqlite3" | "sqlite3" | "sql.js" | "bun:sqlite";
+  private transactionDepth = 0;
 
   constructor(
     config: SQLiteConnectionConfig,
@@ -359,6 +360,10 @@ export class SQLiteDriver extends BaseDriver {
    * @returns {Promise<T>} Result
    */
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.transactionDepth > 0) {
+      throw new DriverError("Nested transactions are not supported by the SQLite driver");
+    }
+    this.transactionDepth = 1;
     await this.execute("BEGIN TRANSACTION");
     try {
       const result = await fn();
@@ -367,6 +372,8 @@ export class SQLiteDriver extends BaseDriver {
     } catch (err) {
       await this.execute("ROLLBACK");
       throw err;
+    } finally {
+      this.transactionDepth = 0;
     }
   }
 
