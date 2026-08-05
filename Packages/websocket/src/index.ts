@@ -8,6 +8,7 @@ export type {
   UpgradeOptions,
   UpgradeRequest,
   WebSocketHandlers,
+  WebSocketRequest,
   WebSocketServerOptions,
   WSData,
   WSMessage,
