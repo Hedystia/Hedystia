@@ -276,6 +276,8 @@ describe("Column Types - File", () => {
 
 // ── MySQL drivers ──
 
+const isCI = !!process.env.CI;
+
 const mysqlConfigs = [
   { name: "mysql", provider: "mysql2" },
   { name: "mysql", provider: "mysql" },
@@ -305,6 +307,9 @@ for (const config of mysqlConfigs) {
         initialized = true;
         await db.allTypes.truncate();
       } catch (err: any) {
+        if (isCI) {
+          throw err;
+        }
         console.warn(`MySQL (${config.provider}) column-types skipped:`, err.message);
       }
     });
@@ -351,6 +356,9 @@ describe("Column Types - S3", () => {
       await db.initialize();
       initialized = true;
     } catch (err: any) {
+      if (isCI) {
+        throw err;
+      }
       console.warn("S3 column-types skipped:", err.message);
     }
   }, 30000);
