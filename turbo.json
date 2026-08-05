@@ -15,7 +15,23 @@
     },
     "test": {
       "dependsOn": ["build"],
-      "cache": false
+      "cache": false,
+      "env": [
+        "CI",
+        "MYSQL_HOST",
+        "MYSQL_PORT",
+        "MYSQL_DATABASE",
+        "MYSQL_USER",
+        "MYSQL_PASSWORD",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DATABASE",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "S3_URL",
+        "S3_KEY_ID",
+        "S3_ACCESS_KEY"
+      ]
     }
   }
 }
