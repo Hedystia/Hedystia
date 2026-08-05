@@ -1,4 +1,5 @@
 import createWrappedHandler from "../handlers/wrapped";
+import { mergeSecurityOptions } from "../security";
 import { Hedystia } from "../server";
 import type {
   ContextTypes,
@@ -250,7 +251,10 @@ export default class Core<
     ) => Hedystia<GroupRoutes, Macros, GlobalHeaders>,
     schema?: { [K in EnabledMacros]?: true },
   ): Hedystia<[...Routes, ...PrefixRoutes<Prefix, GroupRoutes>], Macros, GlobalHeaders> {
-    const groupApp = new Hedystia({ cors: this.cors }) as Hedystia<[], Macros>;
+    const groupApp = new Hedystia({
+      cors: this.cors,
+      security: this.securityOptions,
+    }) as Hedystia<[], Macros>;
     groupApp.prefix = "";
     groupApp.macros = { ...this.macros };
 
@@ -289,6 +293,13 @@ export default class Core<
         this.routes.push({
           ...route,
           path: newPath,
+          schema: {
+            ...route.schema,
+            security:
+              route.schema.security === false
+                ? false
+                : mergeSecurityOptions(configuredApp.securityOptions, route.schema.security),
+          },
         });
       }
     }
@@ -384,6 +395,7 @@ export default class Core<
       description?: string;
       summary?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
     } & { [K in EnabledMacros]?: true } = {} as any,
   ): Hedystia<
     [
@@ -417,6 +429,7 @@ export default class Core<
           "description",
           "summary",
           "tags",
+          "security",
         ].includes(key) && (schema as any)[key] === true,
     );
 
@@ -434,6 +447,7 @@ export default class Core<
                 "description",
                 "summary",
                 "tags",
+                "security",
               ].includes(key) &&
               (schema as any)[key] === true &&
               this.macros[key]
@@ -465,6 +479,7 @@ export default class Core<
         message: schema.message,
         description: schema.description || schema.summary,
         tags: schema.tags,
+        security: schema.security,
       },
     });
 
@@ -634,6 +649,7 @@ export default class Core<
         response: schema.response,
         description: schema.description,
         tags: schema.tags,
+        security: schema.security,
       },
       test: schema.test,
     });
@@ -677,6 +693,7 @@ export default class Core<
       error?: ErrorSchema;
       description?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
       test?: (
         context: TestContext<Params, Query, undefined, Headers, ResponseSchema>,
       ) => Promise<void> | void;
@@ -743,6 +760,7 @@ export default class Core<
       response?: ResponseSchema;
       description?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
       test?: (
         context: TestContext<Params, Query, Body, Headers, ResponseSchema>,
       ) => Promise<void> | void;
@@ -809,6 +827,7 @@ export default class Core<
       response?: ResponseSchema;
       description?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
       test?: (
         context: TestContext<Params, Query, Body, Headers, ResponseSchema>,
       ) => Promise<void> | void;
@@ -875,6 +894,7 @@ export default class Core<
       response?: ResponseSchema;
       description?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
       test?: (
         context: TestContext<Params, Query, Body, Headers, ResponseSchema>,
       ) => Promise<void> | void;
@@ -941,6 +961,7 @@ export default class Core<
       response?: ResponseSchema;
       description?: string;
       tags?: string[];
+      security?: import("../security").SecurityOptions | false;
       test?: (
         context: TestContext<Params, Query, Body, Headers, ResponseSchema>,
       ) => Promise<void> | void;
@@ -1191,11 +1212,25 @@ export default class Core<
           this.routes.push({
             ...route,
             path: fullPrefix,
+            schema: {
+              ...route.schema,
+              security:
+                route.schema.security === false
+                  ? false
+                  : mergeSecurityOptions(childFramework.securityOptions, route.schema.security),
+            },
           });
         } else {
           this.routes.push({
             ...route,
             path: fullPrefix + route.path,
+            schema: {
+              ...route.schema,
+              security:
+                route.schema.security === false
+                  ? false
+                  : mergeSecurityOptions(childFramework.securityOptions, route.schema.security),
+            },
           });
         }
       }
@@ -1241,7 +1276,10 @@ export default class Core<
       app: Hedystia<[], Macros, GlobalHeaders>,
     ) => Hedystia<IfRoutes, Macros, GlobalHeaders> | undefined,
   ): Hedystia<[...Routes, ...IfRoutes], Macros, GlobalHeaders> {
-    const ifApp = new Hedystia({ cors: this.cors }) as Hedystia<[], Macros, GlobalHeaders>;
+    const ifApp = new Hedystia({
+      cors: this.cors,
+      security: this.securityOptions,
+    }) as Hedystia<[], Macros, GlobalHeaders>;
     ifApp.prefix = this.prefix;
     ifApp.macros = { ...this.macros };
 
@@ -1250,7 +1288,16 @@ export default class Core<
     const sourceApp = result instanceof Hedystia ? result : ifApp;
 
     for (const route of (sourceApp as any).routes) {
-      this.routes.push(route);
+      this.routes.push({
+        ...route,
+        schema: {
+          ...route.schema,
+          security:
+            route.schema.security === false
+              ? false
+              : mergeSecurityOptions(sourceApp.securityOptions, route.schema.security),
+        },
+      });
     }
 
     for (const staticRoute of (sourceApp as any).staticRoutes) {
