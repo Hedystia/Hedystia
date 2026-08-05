@@ -31,8 +31,9 @@ export type { ClientWebSocketOptions } from "./types";
  * ```
  */
 export function resolveWebSocket(): typeof WebSocket {
-  if (typeof globalThis !== "undefined" && (globalThis as any).WebSocket) {
-    return (globalThis as any).WebSocket as typeof WebSocket;
+  const Ctor = (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
+  if (Ctor) {
+    return Ctor;
   }
   throw new Error(
     "@hedystia/ws: no native WebSocket found in globalThis. " +
@@ -72,7 +73,7 @@ export function createWebSocket(url: string, options?: ClientWebSocketOptions): 
   const Ctor = resolveWebSocket();
 
   if (options?.protocols) {
-    return new Ctor(url, options.protocols as any);
+    return new Ctor(url, options.protocols);
   }
   return new Ctor(url);
 }
@@ -129,7 +130,7 @@ export class WebSocketClient {
    * @param data - WHATWG-compatible payload.
    */
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-    this.socket.send(data as any);
+    this.socket.send(data);
   }
 
   /**
@@ -146,27 +147,27 @@ export class WebSocketClient {
    * Assign the open-event listener.
    */
   set onopen(cb: ((ev: Event) => void) | null) {
-    (this.socket as any).onopen = cb;
+    this.socket.onopen = cb;
   }
 
   /**
    * Assign the message-event listener.
    */
   set onmessage(cb: ((ev: MessageEvent) => void) | null) {
-    (this.socket as any).onmessage = cb;
+    this.socket.onmessage = cb;
   }
 
   /**
    * Assign the close-event listener.
    */
   set onclose(cb: ((ev: CloseEvent) => void) | null) {
-    (this.socket as any).onclose = cb;
+    this.socket.onclose = cb;
   }
 
   /**
    * Assign the error-event listener.
    */
   set onerror(cb: ((ev: Event) => void) | null) {
-    (this.socket as any).onerror = cb;
+    this.socket.onerror = cb;
   }
 }
