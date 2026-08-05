@@ -1,112 +1,85 @@
 # @hedystia/db
 
-Next-gen TypeScript ORM for building type-safe database layers at lightspeed. Focused on performance, developer experience, and multi-driver flexibility.
+Type-safe database primitives for SQLite, MySQL, PostgreSQL, JSON files, and
+S3-backed storage.
 
-## Features
-
-- 💎 **Type-safe by Design**: First-class TypeScript inference for all your queries.
-- 🚀 **Multi-Driver Support**: Native drivers for SQLite, MySQL, PostgreSQL, and experimental support for File/S3 storage.
-- ⚡ **Auto-Mapping**: Decouple database table/column names from your TypeScript models.
-- 🔗 **Smart Relations**: Define relationships once and load them eagerly with intuitive `with` queries.
-- 📦 **Zero-Config Migrations**: CLI for generating atomic migrations and schema synchronization.
-- 🧠 **Built-in Caching**: Adaptive TTL caching with automatic invalidation on writes.
-
-## Installation
+## Install
 
 ```bash
-bun add @hedystia/db
+pnpm add @hedystia/db
 ```
 
-### Choose your Driver
+Install the driver used by the application separately: `better-sqlite3`,
+`sqlite3`, `sql.js`, `mysql2`, `mysql`, `pg`, or `@aws-sdk/client-s3`.
 
-| Database | Driver Package | Command |
-| --- | --- | --- |
-| **SQLite** | `better-sqlite3`, `sqlite3`, `sql.js` | `bun add better-sqlite3` |
-| **MySQL** | `mysql2` or `mysql` | `bun add mysql2` |
-| **PostgreSQL** | `pg` | `bun add pg` |
-| **S3** | `@aws-sdk/client-s3` | `bun add @aws-sdk/client-s3` |
-| **File** | *Built-in* | *No installation needed* |
-| **Edge** | `bun:sqlite` (Bun only) | *No installation needed* |
+## Schema and typed inserts
 
+```ts
+import { database, integer, table, varchar } from "@hedystia/db";
 
----
-
-## Quick Start
-
-### Define your Schema
-
-Define your tables using the `table` function. This allows you to map database properties to your preferred TypeScript keys.
-
-```typescript
-import { table, integer, varchar, text } from "@hedystia/db";
-
-export const users = table("example_users", {
+const users = table("users", {
   id: integer().primaryKey().autoIncrement(),
-  fullName: varchar(255).name("full_name").notNull(),
-  email: varchar(255).unique(),
+  name: varchar(255).notNull(),
 });
-
-export const posts = table("example_posts", {
-  id: integer().primaryKey().autoIncrement(),
-  authorId: integer().name("author_id").references(() => users.id),
-  title: varchar(255).notNull(),
-  body: text(),
-});
-```
-
-### Initialize the Database
-
-Use the **Object Schema** method (recommended) to automatically alias your tables on the database instance.
-
-```typescript
-import { database } from "@hedystia/db";
-import { users, posts } from "./schema";
 
 const db = database({
-  schemas: { users, posts }, // Alias tables as db.users and db.posts
+  schemas: [users],
   database: "sqlite",
-  connection: { filename: "./main.db" },
-  syncSchemas: true, // Auto-create tables during development
+  connection: { filename: "./app.db" },
+  syncSchemas: true,
 });
 
 await db.initialize();
+const user = await db.users.insert({ name: "Alice" });
+await db.users.insertMany([{ name: "Bob" }, { name: "Cara" }]);
 ```
 
-### Query your Data
+`InferInsert<typeof users>` makes auto-increment columns optional while keeping
+non-generated columns required. The same insert type is used by repositories,
+`insertMany`, and `upsert.create`.
 
-```typescript
-// Insert a record
-const newUser = await db.users.insert({ 
-  fullName: "Alice Vance", 
-  email: "alice@hedystia.com" 
-});
+## Queries and migrations
 
-// Find with eager relations
-const userWithPosts = await db.users.findFirst({
-  where: { fullName: "Alice Vance" },
-  with: { posts: true }
-});
-
-// Powerful filtering
-const recentPosts = await db.posts.find({
-  where: { authorId: 1, title: { like: "%Hedystia%" } },
+```ts
+const rows = await db.users.find({
+  where: { name: { like: "%a%" } },
   orderBy: { id: "desc" },
-  take: 5
+});
+
+const addIndex = migration("users_name_index", {
+  async up({ schema }) {
+    await schema.addIndex("users", ["name"]);
+  },
+  async down({ schema }) {
+    await schema.dropIndex("users", "users_name_index");
+  },
 });
 ```
 
-## Advanced Usage
+Each migration is tracked by name and executed inside the driver's transaction
+boundary. SQL drivers use native transactions. File and S3 drivers provide a
+snapshot-based rollback and remove newly created table artifacts when a
+migration fails; storage-level failures should still be monitored because
+object storage is not a relational transaction engine.
 
-Explore our detailed documentation for advanced topics:
+Migration names must be unique. Indexes are supported by SQLite, MySQL, and
+PostgreSQL. File and S3 drivers reject index operations explicitly.
 
-- [**Schema Definition**](https://docs.hedystia.com/db/schema) - Custom types, constraints, and aliases.
-- [**Relations**](https://docs.hedystia.com/db/relations) - One-to-many, many-to-one, and cascade behaviors.
-- [**Queries**](https://docs.hedystia.com/db/queries) - Full API reference for find, insert, update, and delete.
-- [**CLI & Migrations**](https://docs.hedystia.com/db/cli) - Managing schema changes safely.
-- [**Drivers**](https://docs.hedystia.com/db/drivers/sqlite) - Specific configuration for MySQL, PostgreSQL, SQLite, S3, and more.
+## Drivers
 
-## Community & Links
+| Driver | Transaction model | Indexes |
+| --- | --- | --- |
+| SQLite | Native transaction | Yes |
+| MySQL/MariaDB | Connection transaction | Yes |
+| PostgreSQL | Client transaction | Yes |
+| File | In-memory snapshot + flush | No |
+| S3 | In-memory snapshot + object flush | No |
 
-- [Documentation](https://docs.hedystia.com/db/start)
-- [GitHub](https://github.com/Hedystia/Hedystia)
-- [Discord](https://hedystia.com/discord)
+## Documentation
+
+- [Database documentation](https://docs.hedystia.com/db/start)
+- [Schema](https://docs.hedystia.com/db/schema)
+- [Queries](https://docs.hedystia.com/db/queries)
+- [Migrations](https://docs.hedystia.com/db/cli)
+
+MIT License © 2026 Hedystia
