@@ -85,7 +85,20 @@ export class Swagger {
       operationObject.tags = tags;
     }
 
-    (this.spec.paths as any)[normalizedPath][methodLower] = operationObject;
+    const pathItem = (this.spec.paths as any)[normalizedPath] as Record<string, unknown>;
+    if (methodLower === "ws" || methodLower === "sub") {
+      const extensionName =
+        methodLower === "ws" ? "x-hedystia-websocket" : "x-hedystia-subscription";
+      pathItem[extensionName] = operationObject;
+      return;
+    }
+
+    if (
+      !["get", "put", "post", "patch", "delete", "options", "head", "trace"].includes(methodLower)
+    ) {
+      return;
+    }
+    pathItem[methodLower] = operationObject;
   }
 
   private extractJsonSchema(schema: any): any {
@@ -236,6 +249,9 @@ export class Swagger {
 
     Object.entries(this.spec.paths || {}).forEach(([path, pathItem]: [string, any]) => {
       Object.entries(pathItem).forEach(([method, operation]: [string, any]) => {
+        if (method.startsWith("x-hedystia-")) {
+          return;
+        }
         const tags = operation.tags || [defaultGroup];
         const primaryTag = tags[0];
 
