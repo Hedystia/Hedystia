@@ -21,7 +21,13 @@ export function detectRuntime(): Runtime {
   if (typeof globalThis === "undefined") {
     return "unknown";
   }
-  const g = globalThis as any;
+  const g = globalThis as {
+    Bun?: { serve?: unknown };
+    Deno?: unknown;
+    process?: { versions?: { node?: string } };
+    window?: unknown;
+    document?: unknown;
+  };
   if (g.Bun?.serve) {
     return "bun";
   }
