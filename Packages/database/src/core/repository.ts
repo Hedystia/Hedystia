@@ -159,13 +159,17 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
    * @returns {Promise<T>} The inserted row
    */
   async insert(data: Partial<T> | Partial<T>[]): Promise<T> {
-    const single = Array.isArray(data) ? data[0] : data;
-    if (!single) {
-      throw new QueryError("Insert data cannot be empty");
+    if (Array.isArray(data)) {
+      const rows = await this.insertMany(data);
+      const first = rows[0];
+      if (!first) {
+        throw new QueryError("Insert data cannot be empty");
+      }
+      return first;
     }
 
     this.cache.invalidateTable(this.tableName);
-    const cleaned = this.toDbKeys(this.cleanData(single));
+    const cleaned = this.toDbKeys(this.cleanData(data));
 
     const params: unknown[] = [];
     const sql = compileInsert(this.tableName, cleaned, params, this.dialect);
