@@ -1,34 +1,31 @@
+type RouteHandler = unknown;
+
 type MethodEntry = {
-  handler: any;
+  handler: RouteHandler;
   paramNames: string[];
 };
 
 function splitPathSegments(path: string): string[] {
-  if (path.length > 1 && path.charCodeAt(path.length - 1) === 47) {
-    path = path.slice(0, -1);
-  }
-  if (path === "/") {
+  const normalized = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  if (normalized === "/" || normalized === "") {
     return [];
   }
+  return normalized.split("/").filter(Boolean);
+}
 
-  const parts: string[] = [];
-  let start = path.charCodeAt(0) === 47 ? 1 : 0;
-  for (let i = start; i <= path.length; i++) {
-    if (i === path.length || path.charCodeAt(i) === 47) {
-      if (i > start) {
-        parts.push(path.slice(start, i));
-      }
-      start = i + 1;
-    }
+function decodeSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
-  return parts;
 }
 
 class Node {
-  part: string;
-  children: Record<string, Node> = Object.create(null);
-  wildcard: Node | null = null;
-  parametric: Node | null = null;
+  readonly part: string;
+  readonly children: Record<string, Node> = Object.create(null);
+  parametric: { node: Node; name: string } | null = null;
+  wildcard: { node: Node; name: string } | null = null;
   methods: Record<string, MethodEntry> | null = null;
 
   constructor(part: string) {
@@ -36,72 +33,136 @@ class Node {
   }
 }
 
+/**
+ * Small radix-style router used by the HTTP, SSE, and subscription layers.
+ * Static segments take precedence over parameters, and parameters take
+ * precedence over wildcards.
+ */
 export class Router {
-  root: Node = new Node("/");
+  /** Root node of the route tree. */
+  readonly root = new Node("/");
 
-  add(method: string, path: string, store: any) {
+  /**
+   * Register a handler for a method and path.
+   * @param method HTTP or framework method.
+   * @param path Route pattern, supporting `:param` and `*wildcard` segments.
+   * @param handler Value returned when the route matches.
+   */
+  add(method: string, path: string, handler: RouteHandler): void {
     const parts = splitPathSegments(path);
     let current = this.root;
     const paramNames: string[] = [];
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]!;
-
-      if (part.charCodeAt(0) === 58) {
-        const paramName = part.slice(1);
-        paramNames.push(paramName);
+    for (const part of parts) {
+      if (part.startsWith(":")) {
+        const name = part.slice(1) || "param";
+        paramNames.push(name);
         if (!current.parametric) {
-          current.parametric = new Node(":");
-          current.parametric.parametric = null;
+          current.parametric = { node: new Node(":"), name };
         }
-        current = current.parametric;
-      } else if (part === "*") {
-        if (!current.wildcard) {
-          current.wildcard = new Node("*");
-        }
-        current = current.wildcard;
-      } else {
-        if (!current.children[part]) {
-          current.children[part] = new Node(part);
-        }
-        current = current.children[part];
+        current = current.parametric.node;
+        continue;
       }
+
+      if (part.startsWith("*")) {
+        const name = part.slice(1) || "wildcard";
+        paramNames.push(name);
+        if (!current.wildcard) {
+          current.wildcard = { node: new Node("*"), name };
+        }
+        current = current.wildcard.node;
+        continue;
+      }
+
+      current.children[part] ??= new Node(part);
+      current = current.children[part]!;
     }
-    if (!current.methods) {
-      current.methods = Object.create(null);
-    }
-    current.methods![method] = { handler: store, paramNames };
+
+    current.methods ??= Object.create(null);
+    current.methods[method] = { handler, paramNames };
   }
 
-  find(method: string, path: string): { handler: any; params: Record<string, string> } | null {
+  /**
+   * Find a handler for a method and request path.
+   * @param method HTTP or framework method.
+   * @param path Request pathname.
+   * @returns The matched handler and decoded parameters, or `null`.
+   */
+  find(
+    method: string,
+    path: string,
+  ): { handler: RouteHandler; params: Record<string, string> } | null {
     const parts = splitPathSegments(path);
-    let current = this.root;
-    const paramValues: string[] = [];
+    const result = this.match(this.root, parts, 0, method, []);
+    if (!result) {
+      return null;
+    }
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]!;
+    const params: Record<string, string> = {};
+    for (let index = 0; index < result.entry.paramNames.length; index++) {
+      const name = result.entry.paramNames[index];
+      const value = result.values[index];
+      if (name && value !== undefined) {
+        params[name] = value;
+      }
+    }
+    return { handler: result.entry.handler, params };
+  }
 
-      if (current.children[part]) {
-        current = current.children[part];
-      } else if (current.parametric) {
-        paramValues.push(part);
-        current = current.parametric;
-      } else if (current.wildcard) {
-        current = current.wildcard;
-        break;
-      } else {
-        return null;
+  private match(
+    node: Node,
+    parts: string[],
+    index: number,
+    method: string,
+    values: string[],
+  ): { entry: MethodEntry; values: string[] } | null {
+    if (index === parts.length) {
+      const entry = node.methods?.[method];
+      if (entry) {
+        return { entry, values };
+      }
+      // A wildcard can also match an empty suffix.
+      if (node.wildcard) {
+        const wildcardEntry = this.match(node.wildcard.node, parts, index, method, [...values, ""]);
+        if (wildcardEntry) {
+          return wildcardEntry;
+        }
+      }
+      return null;
+    }
+
+    const part = parts[index]!;
+    const staticNode = node.children[part];
+    if (staticNode) {
+      const staticMatch = this.match(staticNode, parts, index + 1, method, values);
+      if (staticMatch) {
+        return staticMatch;
       }
     }
 
-    const entry = current.methods?.[method];
-    if (!entry) {
-      return null;
+    if (node.parametric) {
+      const paramMatch = this.match(node.parametric.node, parts, index + 1, method, [
+        ...values,
+        decodeSegment(part),
+      ]);
+      if (paramMatch) {
+        return paramMatch;
+      }
     }
-    const params: Record<string, string> = {};
-    for (let i = 0; i < entry.paramNames.length && i < paramValues.length; i++) {
-      params[entry.paramNames[i]!] = paramValues[i]!;
+
+    if (node.wildcard) {
+      for (let end = parts.length; end >= index; end--) {
+        const remainder = parts.slice(index, end).map(decodeSegment).join("/");
+        const wildcardMatch = this.match(node.wildcard.node, parts, end, method, [
+          ...values,
+          remainder,
+        ]);
+        if (wildcardMatch) {
+          return wildcardMatch;
+        }
+      }
     }
-    return { handler: entry.handler, params };
+
+    return null;
   }
 }
