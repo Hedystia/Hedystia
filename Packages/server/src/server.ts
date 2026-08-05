@@ -5,6 +5,19 @@ import generateCorsHeaders from "./handlers/cors";
 import processGenericHandlers from "./handlers/generic";
 import { Router } from "./router";
 import { serve as serveUnified, type UnifiedServer } from "./runtime";
+import {
+  applySecurityResponse,
+  assertRequestLimits,
+  consumeRateLimit,
+  getRequestId,
+  MemoryRateLimitStore,
+  mergeSecurityOptions,
+  RateLimitError,
+  SecurityInputError,
+  type SecurityOptions,
+  sanitizeInput,
+  withTimeout,
+} from "./security";
 import type {
   CookieOptions,
   CorsOptions,
@@ -18,8 +31,14 @@ import type {
   ValidationSchema,
 } from "./types";
 import type { Assertion } from "./types/routes";
-import type { DebugLevel } from "./utils";
-import { createLogger, determineContentType, isBunHTMLBundle, parseRequestBody } from "./utils";
+import {
+  createLogger,
+  type DebugLevel,
+  determineContentType,
+  isBunHTMLBundle,
+  limitRequestBody,
+  parseRequestBody,
+} from "./utils";
 
 interface FrameworkOptions<H extends ValidationSchema | undefined = undefined> {
   reusePort?: boolean;
@@ -28,12 +47,19 @@ interface FrameworkOptions<H extends ValidationSchema | undefined = undefined> {
   sse?: boolean;
   debugLevel?: DebugLevel;
   headers?: H;
+  security?: SecurityOptions;
 }
 
 type WebSocketData = {
   __wsPath?: string;
   request?: Request;
   subscribedTopics?: Set<string>;
+};
+
+type SecurityRequestState = {
+  requestId?: string;
+  rateLimit?: { limit: number; count: number; resetAt: number };
+  rejection?: Response;
 };
 
 export class Hedystia<
@@ -48,6 +74,16 @@ export class Hedystia<
   private isCompiled = false;
   private log: ReturnType<typeof createLogger>;
   private defaultHeaders: ValidationSchema | undefined;
+  private security: SecurityOptions;
+  private readonly rateLimitStore: MemoryRateLimitStore;
+
+  /**
+   * Returns the global security configuration for framework composition.
+   * @returns {SecurityOptions} Global security options
+   */
+  public get securityOptions(): SecurityOptions {
+    return this.security;
+  }
 
   private activeConnections: Map<
     ServerWebSocket,
@@ -94,6 +130,8 @@ export class Hedystia<
     this.sseMode = options?.sse ?? false;
     this.log = createLogger(options?.debugLevel ?? "none");
     this.defaultHeaders = options?.headers;
+    this.security = options?.security ?? {};
+    this.rateLimitStore = new MemoryRateLimitStore();
   }
 
   static createResponse(data: any, contentType?: string): Response {
@@ -200,13 +238,41 @@ export class Hedystia<
 
     return async (req: Request, params: Record<string, string>) => {
       let ctx: any;
+      const routeSecurity = mergeSecurityOptions(this.security, route.schema.security);
+      const requestId = routeSecurity.requestId
+        ? getRequestId(
+            req,
+            typeof routeSecurity.requestId === "object"
+              ? routeSecurity.requestId.header
+              : undefined,
+          )
+        : undefined;
+      let rateLimit: { limit: number; count: number; resetAt: number } | undefined;
       try {
+        assertRequestLimits(req, routeSecurity);
+        if (routeSecurity.rateLimit) {
+          const result = await consumeRateLimit(req, routeSecurity.rateLimit, this.rateLimitStore);
+          rateLimit = { ...result, limit: routeSecurity.rateLimit.limit };
+          if (result.count > routeSecurity.rateLimit.limit) {
+            throw new RateLimitError(routeSecurity.rateLimit.limit, result.count, result.resetAt);
+          }
+        }
         const urlStr = req.url;
         const qIndex = urlStr.indexOf("?");
         let query =
           qIndex !== -1
             ? Object.fromEntries(new URLSearchParams(urlStr.substring(qIndex)).entries())
             : {};
+        if (routeSecurity.sanitize) {
+          query = sanitizeInput(
+            query,
+            routeSecurity.sanitize === true ? {} : routeSecurity.sanitize,
+          );
+          params = sanitizeInput(
+            params,
+            routeSecurity.sanitize === true ? {} : routeSecurity.sanitize,
+          );
+        }
 
         for (let i = 0; i < hooks.onRequest.length; i++) {
           const handler = hooks.onRequest[i];
@@ -261,6 +327,10 @@ export class Hedystia<
             headers = { ...headers, ...result.value };
           }
         }
+        if (routeSecurity.sanitize) {
+          const sanitizeOptions = routeSecurity.sanitize === true ? {} : routeSecurity.sanitize;
+          headers = sanitizeInput(headers, sanitizeOptions);
+        }
 
         let body: any;
         let rawBody: any;
@@ -269,7 +339,9 @@ export class Hedystia<
           try {
             let parsed = false;
             if (hooks.onParse.length > 0) {
-              const cloned = req.clone() as unknown as Request;
+              const cloned = routeSecurity.bodyLimit
+                ? await limitRequestBody(req, routeSecurity.bodyLimit)
+                : (req.clone() as unknown as Request);
               for (let i = 0; i < hooks.onParse.length; i++) {
                 const handler = hooks.onParse[i];
                 if (handler) {
@@ -285,11 +357,17 @@ export class Hedystia<
             }
 
             if (!parsed) {
-              body = await parseRequestBody(req);
+              body = await parseRequestBody(req, routeSecurity.bodyLimit);
             }
 
             if (body === "") {
               body = undefined;
+            }
+            if (routeSecurity.sanitize && body !== undefined) {
+              body = sanitizeInput(
+                body,
+                routeSecurity.sanitize === true ? {} : routeSecurity.sanitize,
+              );
             }
 
             if (bodySchema?.["~standard"]) {
@@ -301,7 +379,10 @@ export class Hedystia<
                 body = result.value;
               }
             }
-          } catch {
+          } catch (err) {
+            if (err instanceof SecurityInputError) {
+              throw err;
+            }
             if (bodySchema) {
               throw { statusCode: 400, message: "Invalid body format" };
             }
@@ -364,6 +445,7 @@ export class Hedystia<
           set: this.createResponseContext(),
           publish: this.publish,
           stream: streamContext,
+          requestId,
         };
 
         for (let i = 0; i < hooks.onTransform.length; i++) {
@@ -395,9 +477,13 @@ export class Hedystia<
             }
             return next();
           };
-          result = await next();
+          result = routeSecurity.timeout
+            ? await withTimeout(next(), routeSecurity.timeout)
+            : await next();
         } else {
-          result = await runMain();
+          result = routeSecurity.timeout
+            ? await withTimeout(runMain(), routeSecurity.timeout)
+            : await runMain();
         }
 
         if (hooks.onMapResponse.length > 0) {
@@ -451,7 +537,7 @@ export class Hedystia<
           }, 0);
         }
 
-        return result;
+        return applySecurityResponse(result, routeSecurity, requestId, rateLimit);
       } catch (err: any) {
         if (hooks.onError.length > 0) {
           for (let i = 0; i < hooks.onError.length; i++) {
@@ -465,13 +551,23 @@ export class Hedystia<
                   if (!(errResult instanceof Response)) {
                     errResult = Hedystia.createResponse(errResult);
                   }
-                  return this.applyResponseContext(
-                    errResult,
-                    ctx?.set || {
-                      status: () => {},
-                      headers: { set: () => {}, get: () => null, delete: () => {}, add: () => {} },
-                      cookies: { get: () => undefined, set: () => {}, delete: () => {} },
-                    },
+                  return applySecurityResponse(
+                    this.applyResponseContext(
+                      errResult,
+                      ctx?.set || {
+                        status: () => {},
+                        headers: {
+                          set: () => {},
+                          get: () => null,
+                          delete: () => {},
+                          add: () => {},
+                        },
+                        cookies: { get: () => undefined, set: () => {}, delete: () => {} },
+                      },
+                    ),
+                    routeSecurity,
+                    requestId,
+                    rateLimit,
                   );
                 }
               }
@@ -495,7 +591,7 @@ export class Hedystia<
           });
         }
 
-        return finalRes;
+        return applySecurityResponse(finalRes, routeSecurity, requestId, rateLimit);
       }
     };
   }
@@ -541,11 +637,14 @@ export class Hedystia<
     const method = req.method;
 
     if (this.cors && method === "OPTIONS") {
+      const securityState = await this.prepareGlobalSecurity(req);
+      let response = this.applyGlobalSecurity(new Response(null, { status: 204 }), securityState);
       const corsHeaders = await generateCorsHeaders(this.cors, req);
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders as any,
-      });
+      response = await this.applyCorsHeaders(response, req);
+      for (const [key, value] of Object.entries(corsHeaders)) {
+        response.headers.set(key, String(value));
+      }
+      return response;
     }
 
     if (method === "POST") {
@@ -554,14 +653,39 @@ export class Hedystia<
         const conn = this.sseConnections.get(subscriptionId);
         if (conn?.onMessage) {
           try {
-            const body = await parseRequestBody(req);
-            conn.onMessage(body);
-            const response = new Response("OK", { status: 200 });
+            const routeSecurity = this.security;
+            const requestId = routeSecurity.requestId
+              ? getRequestId(
+                  req,
+                  typeof routeSecurity.requestId === "object"
+                    ? routeSecurity.requestId.header
+                    : undefined,
+                )
+              : undefined;
+            assertRequestLimits(req, routeSecurity);
+            const body = await parseRequestBody(req, routeSecurity.bodyLimit);
+            if (routeSecurity.sanitize) {
+              conn.onMessage(
+                sanitizeInput(body, routeSecurity.sanitize === true ? {} : routeSecurity.sanitize),
+              );
+            } else {
+              conn.onMessage(body);
+            }
+            const response = applySecurityResponse(
+              new Response("OK", { status: 200 }),
+              routeSecurity,
+              requestId,
+            );
             return this.cors
               ? ((await this.applyCorsHeaders(response, req)) as Response)
               : response;
-          } catch {
-            const response = new Response("Invalid Body", { status: 400 });
+          } catch (error: any) {
+            const response = applySecurityResponse(
+              new Response(error instanceof SecurityInputError ? error.message : "Invalid Body", {
+                status: error instanceof SecurityInputError ? error.statusCode : 400,
+              }),
+              this.security,
+            );
             return this.cors
               ? ((await this.applyCorsHeaders(response, req)) as Response)
               : response;
@@ -575,9 +699,18 @@ export class Hedystia<
 
     const fastStatic = this.staticRoutesFast.get(path);
     if (fastStatic && method === "GET") {
-      const response = await fastStatic(req);
+      const securityState = await this.prepareGlobalSecurity(req);
+      if (securityState.rejection) {
+        let response = this.applyGlobalSecurity(new Response(null), securityState);
+        if (this.cors) {
+          response = await this.applyCorsHeaders(response, req);
+        }
+        return response;
+      }
+      let response = await fastStatic(req);
+      response = this.applyGlobalSecurity(response, securityState);
       if (this.cors) {
-        return await this.applyCorsHeaders(response, req);
+        response = await this.applyCorsHeaders(response, req);
       }
       return response;
     }
@@ -591,17 +724,31 @@ export class Hedystia<
       return response;
     }
 
-    if (this.genericHandlers.length > 0) {
-      const response = await processGenericHandlers(req, this.genericHandlers, 0);
+    const preparedSecurity = await this.rejectOrPrepareGlobalSecurity(req);
+    if (preparedSecurity.state.rejection) {
+      let response = this.applyGlobalSecurity(new Response(null), preparedSecurity.state);
       if (this.cors) {
-        return await this.applyCorsHeaders(response, req);
+        response = await this.applyCorsHeaders(response, req);
       }
       return response;
     }
 
-    const notFoundResponse = new Response("Not Found", { status: 404 });
+    req = preparedSecurity.request;
+    const securityState = preparedSecurity.state;
+
+    if (this.genericHandlers.length > 0) {
+      let response = await processGenericHandlers(req, this.genericHandlers, 0);
+      response = this.applyGlobalSecurity(response, securityState);
+      if (this.cors) {
+        response = await this.applyCorsHeaders(response, req);
+      }
+      return response;
+    }
+
+    let notFoundResponse = new Response("Not Found", { status: 404 });
+    notFoundResponse = this.applyGlobalSecurity(notFoundResponse, securityState);
     if (this.cors) {
-      return await this.applyCorsHeaders(notFoundResponse, req);
+      notFoundResponse = await this.applyCorsHeaders(notFoundResponse, req);
     }
     return notFoundResponse;
   }
@@ -609,14 +756,57 @@ export class Hedystia<
   private registerSSERoutes(): void {
     for (const [routePath, handlerData] of this.subscriptionHandlers.entries()) {
       const sseHandler = async (req: Request, params: Record<string, string>) => {
+        const routeSecurity = mergeSecurityOptions(this.security, handlerData.schema.security);
+        const requestId = routeSecurity.requestId
+          ? getRequestId(
+              req,
+              typeof routeSecurity.requestId === "object"
+                ? routeSecurity.requestId.header
+                : undefined,
+            )
+          : undefined;
+        let rateLimit: { limit: number; count: number; resetAt: number } | undefined;
+        try {
+          assertRequestLimits(req, routeSecurity);
+          if (routeSecurity.rateLimit) {
+            const result = await consumeRateLimit(
+              req,
+              routeSecurity.rateLimit,
+              this.rateLimitStore,
+            );
+            rateLimit = { ...result, limit: routeSecurity.rateLimit.limit };
+            if (result.count > routeSecurity.rateLimit.limit) {
+              throw new RateLimitError(routeSecurity.rateLimit.limit, result.count, result.resetAt);
+            }
+          }
+        } catch (error: any) {
+          return applySecurityResponse(
+            new Response(
+              JSON.stringify({ message: error.message, code: error.statusCode || 500 }),
+              {
+                status: error.statusCode || 500,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+            routeSecurity,
+            requestId,
+            rateLimit,
+          );
+        }
+
         const url = new URL(req.url);
-        const query = Object.fromEntries(url.searchParams.entries());
+        let query = Object.fromEntries(url.searchParams.entries());
         const rawHeaders: Record<string, string> = {};
         req.headers.forEach((v, k) => {
           rawHeaders[k.toLowerCase()] = v;
         });
 
         let validatedParams = params || {};
+        if (routeSecurity.sanitize) {
+          const sanitizeOptions = routeSecurity.sanitize === true ? {} : routeSecurity.sanitize;
+          validatedParams = sanitizeInput(validatedParams, sanitizeOptions);
+          query = sanitizeInput(query, sanitizeOptions);
+        }
         if (handlerData.schema.params) {
           const result = handlerData.schema.params["~standard"].validate(params) as any;
           if ("issues" in result) {
@@ -707,6 +897,7 @@ export class Hedystia<
                 route: topic,
                 method: "SUB",
                 data: undefined,
+                requestId,
                 errorData: undefined,
                 subscriptionId,
                 isActive,
@@ -795,13 +986,18 @@ export class Hedystia<
           },
         });
 
-        return new Response(stream, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
-        });
+        return applySecurityResponse(
+          new Response(stream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          }),
+          routeSecurity,
+          requestId,
+          rateLimit,
+        );
       };
 
       this.router.add("GET", routePath, sseHandler);
@@ -1508,6 +1704,83 @@ export class Hedystia<
 
     (context as any).__responseData = responseData;
     return context;
+  }
+
+  private async prepareGlobalSecurity(req: Request): Promise<SecurityRequestState> {
+    let requestId: string | undefined;
+    let rateLimit: { limit: number; count: number; resetAt: number } | undefined;
+
+    try {
+      assertRequestLimits(req, this.security);
+      if (this.security.requestId) {
+        requestId = getRequestId(
+          req,
+          typeof this.security.requestId === "object" ? this.security.requestId.header : undefined,
+        );
+      }
+      if (this.security.rateLimit) {
+        const result = await consumeRateLimit(req, this.security.rateLimit, this.rateLimitStore);
+        rateLimit = { ...result, limit: this.security.rateLimit.limit };
+        if (result.count > this.security.rateLimit.limit) {
+          return {
+            requestId,
+            rateLimit,
+            rejection: new Response(JSON.stringify({ message: "Too Many Requests", code: 429 }), {
+              status: 429,
+              headers: { "Content-Type": "application/json" },
+            }),
+          };
+        }
+      }
+      return { requestId, rateLimit };
+    } catch (error: any) {
+      return {
+        requestId,
+        rateLimit,
+        rejection: new Response(
+          JSON.stringify({ message: error.message, code: error.statusCode || 500 }),
+          {
+            status: error.statusCode || 500,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      };
+    }
+  }
+
+  private applyGlobalSecurity(response: Response, state: SecurityRequestState): Response {
+    return applySecurityResponse(
+      state.rejection || response,
+      this.security,
+      state.requestId,
+      state.rateLimit,
+    );
+  }
+
+  private async rejectOrPrepareGlobalSecurity(
+    req: Request,
+  ): Promise<{ state: SecurityRequestState; request: Request }> {
+    const state = await this.prepareGlobalSecurity(req);
+    if (state.rejection || this.security.bodyLimit === undefined) {
+      return { state, request: req };
+    }
+    try {
+      return { state, request: await limitRequestBody(req, this.security.bodyLimit) };
+    } catch (error: any) {
+      return {
+        state: {
+          ...state,
+          rejection: new Response(
+            JSON.stringify({ message: error.message, code: error.statusCode || 500 }),
+            {
+              status: error.statusCode || 500,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        },
+        request: req,
+      };
+    }
   }
 
   private async applyCorsHeaders(response: Response, req: Request): Promise<Response> {
