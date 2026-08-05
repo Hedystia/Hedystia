@@ -1,90 +1,82 @@
-<div align="center">
-  <p>
-    <strong>🚀 Hedystia Validations</strong>
-  </p>
+# @hedystia/validations
 
-  <p>
-    <strong>Next-gen TypeScript validation system for building type-safe APIs at lightspeed! ⚡</strong>
-  </p>
+Type-safe runtime validation for TypeScript APIs with Standard Schema compatibility.
 
-  <p>
-    <a href="https://docs.hedystia.com/validations/start"><img src="https://img.shields.io/badge/Docs-blue?style=flat-square" alt="Documentation"></a>
-    <a href="https://www.npmjs.com/package/@hedystia/validations"><img src="https://img.shields.io/npm/v/@hedystia/validations.svg?style=flat-square" alt="npm version"></a>
-    <a href="https://www.npmjs.com/package/@hedystia/validations"><img src="https://img.shields.io/npm/dm/@hedystia/validations.svg?style=flat-square" alt="npm downloads"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/Hedystia/Hedystia.svg?style=flat-square" alt="license"></a>
-    <img src="https://img.shields.io/badge/Bun-powered-FFD43B?style=flat-square&logo=bun" alt="Bun powered">
-  </p>
-</div>
+## Install
 
-## 🌟 Superpowers
-
-- 🌐 **Multi-runtime support** - Bun (default), Deno, Node.js, Vercel, Cloudflare Workers, Fastly Compute, Lambda, etc.
-- 🔒 **End-to-end type safety** - Powerful built-in schema builder `h`.
-- ⚡ **Lightweight & Fast** - Built for maximum performance without overhead.
-- 📝 **Standard Schema** - 100% compatibility with the [Standard Schema](https://standardschema.dev/) specification.
-
-## 🚀 Launch in 30 Seconds
-
-1. Install with Bun:
 ```bash
-bun add @hedystia/validations
+pnpm add @hedystia/validations
 ```
 
-2. Create your schemas:
-```typescript
-import { h } from "@hedystia/validations";
+## Define and infer a schema
+
+```ts
+import { h, type Infer } from "@hedystia/validations";
 
 const userSchema = h.object({
   id: h.number(),
-  name: h.string(),
-  email: h.string().email(),
-  tags: h.string().array().optional()
+  name: h.string().minLength(1),
+  tags: h.array(h.string()).optional(),
+  active: h.default(h.boolean(), true),
 });
-```
-
-3. Type inference:
-```typescript
-import { Infer } from "@hedystia/validations";
 
 type User = Infer<typeof userSchema>;
-/*
-{
-  id: number;
-  name: string;
-  email: string;
-  tags?: string[] | undefined;
+```
+
+Nested object definitions are validated recursively. Validation issues include
+nested paths such as `profile.address.city` and array indexes such as `tags.0`.
+
+## Parse and safeParse
+
+```ts
+const user = await userSchema.parse(input);
+const result = await userSchema.safeParse(input);
+
+if (result.issues) {
+  console.error(result.issues);
 }
-*/
 ```
 
-## 💡 Why Developers Love @hedystia/validations
+Both methods support synchronous and asynchronous schemas. They return a plain
+value/result for synchronous validation and a Promise when a child schema,
+transform, or refinement is asynchronous. Use `await` when the schema may be
+async.
 
-### 🔄 Standard Schema Compatibility
-Since `h` implements the Standard Schema specification, you can use it alongside any other Standard Schema-compatible library.
+## Defaults and object behavior
 
-### 🧩 Complete Primitive & Composite Types
-Provides a robust set of types to model any data structure:
-- `h.string()` with built-in formats (email, uuid, phone, domain, date, regex)
-- `h.number()` with `.min()`, `.max()` and coercion
-- `h.boolean()`
-- `h.literal()` and `h.options()` for unions
-- `h.object()` and `.array()`
+`h.default(schema, value)` accepts `undefined` and `null`, supplies the default,
+and makes the field optional in inferred input and JSON Schema. Optional fields
+are omitted when absent; defaulted fields are materialized in the parsed output.
 
-### ⚡ Built-in Coercion
-URL parameters and query strings are always strings. Use `.coerce()` to convert them automatically:
+```ts
+const settings = h.object({
+  theme: h.default(h.string(), "system"),
+  locale: h.string().optional(),
+});
 
-```typescript
-h.number().coerce()      // "42" -> 42
-h.boolean().coerce()     // "true" -> true
+await settings.parse({});
+// { theme: "system" }
 ```
 
-## 📜 License
+Use `.strict()` to reject unknown keys or `.passthrough()` to retain them.
+
+## Standard Schema and JSON Schema
+
+Every schema exposes `~standard`, `parse`, `safeParse`, and `jsonSchema`.
+`h.toStandard()` adapts primitive and object definitions to the Standard Schema
+interface, while `h.getJsonSchema()` produces a JSON Schema document.
+
+## Common builders
+
+- `h.string()`, `h.number()`, `h.boolean()`, `h.bigint()`
+- `h.object()`, `h.array()`, `h.tuple()`, `h.record()`
+- `h.map()`, `h.set()`, `h.options()`, `h.discriminatedUnion()`
+- `h.default()`, `h.transform()`, `h.refine()`, `h.pipe()`, `h.lazy()`
+- `h.coerce.string()`, `h.coerce.number()`, `h.coerce.boolean()`
+
+## Documentation
+
+- [Validation documentation](https://docs.hedystia.com/validations/start)
+- [Standard Schema](https://standardschema.dev/)
+
 MIT License © 2026 Hedystia
-
-## 📖 Documentation
-- [Validations Documentation](https://docs.hedystia.com/validations/start)
-- [Framework API Reference](https://docs.hedystia.com/framework/overview)
-
-## 🗣️ Community
-- [GitHub Issues](https://github.com/Hedystia/Hedystia/issues)
-- [Discord Server](https://hedystia.com/support)
