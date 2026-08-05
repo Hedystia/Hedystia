@@ -1,4 +1,5 @@
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec";
+import type { SecurityOptions } from "../security";
 
 export type ValidationSchema = StandardSchemaV1<any, any>;
 export type JSONValidationSchema = StandardJSONSchemaV1<any, any>;
@@ -34,6 +35,7 @@ export interface RouteDefinition {
   data?: unknown;
   error?: unknown;
   message?: unknown;
+  security?: SecurityOptions | false;
 }
 
 export interface RouteInfo {
@@ -46,6 +48,7 @@ export interface RouteInfo {
   response?: unknown;
   data?: unknown;
   error?: unknown;
+  security?: SecurityOptions | false;
 }
 
 export type CookieOptions = {
@@ -84,6 +87,7 @@ export type RouteSchema = {
   message?: ValidationSchema & { _type?: any };
   description?: string;
   tags?: string[];
+  security?: SecurityOptions | false;
 };
 
 export type StreamContext = {
@@ -108,6 +112,7 @@ export type InferRouteContext<
   error: (statusCode: number, message?: string) => never;
   set: ResponseContext;
   stream: StreamContext;
+  requestId?: string;
 } & Pick<M, EnabledMacros>;
 
 export type CorsOptions = {
@@ -135,6 +140,7 @@ export type PrefixRoutes<Prefix extends string, T extends RouteDefinition[]> = {
         response: T[K] extends { response: infer R } ? R : undefined;
         data: T[K] extends { data: infer D } ? D : undefined;
         error: T[K] extends { error: infer E } ? E : undefined;
+        security: T[K] extends { security: infer S } ? S : undefined;
       }
     : never;
 };
@@ -155,6 +161,7 @@ export type ContextTypes<T extends RouteSchema = {}, Routes extends RouteDefinit
   set: ResponseContext;
   publish: PublishMethod<Routes>;
   stream: StreamContext;
+  requestId?: string;
 };
 
 export type RequestHandler = (ctx: ContextTypes) => Response | Promise<Response>;
