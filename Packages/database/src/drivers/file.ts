@@ -213,14 +213,32 @@ export class FileDriver extends BaseDriver {
     for (const [name, tableData] of this.data) {
       snapshot.set(name, JSON.stringify(tableData));
     }
+
     try {
       const result = await fn();
       this.flushAll();
       return result;
     } catch (err) {
+      const currentNames = new Set(this.data.keys());
+      this.data.clear();
       for (const [name, json] of snapshot) {
-        this.data.set(name, JSON.parse(json));
+        this.data.set(name, JSON.parse(json) as FileTableData);
       }
+
+      for (const name of currentNames) {
+        if (!snapshot.has(name)) {
+          try {
+            const filePath = join(this.config.directory, `${name}.json`);
+            const { unlinkSync } = await import("fs");
+            if (existsSync(filePath)) {
+              unlinkSync(filePath);
+            }
+          } catch {
+            // Preserve the original transaction error.
+          }
+        }
+      }
+      this.flushAll();
       throw err;
     }
   }
