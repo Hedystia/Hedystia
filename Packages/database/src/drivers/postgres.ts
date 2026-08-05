@@ -16,6 +16,7 @@ export class PostgreSQLDriver extends BaseDriver {
   readonly dialect = "postgres" as const;
   private pool: PostgreSQLPool | null = null;
   private config: PostgreSQLConnectionConfig;
+  private transactionClient: any = null;
 
   constructor(config: PostgreSQLConnectionConfig, _provider?: "pg") {
     super();
@@ -75,7 +76,8 @@ export class PostgreSQLDriver extends BaseDriver {
    */
   async execute(sql: string, params: unknown[] = []): Promise<any> {
     try {
-      const result = await this.getPool().query(sql, this.formatParams(params));
+      const executor = this.transactionClient ?? this.getPool();
+      const result = await executor.query(sql, this.formatParams(params));
       return {
         insertId: result.insertId,
         affectedRows: result.rowCount,
@@ -93,7 +95,8 @@ export class PostgreSQLDriver extends BaseDriver {
    */
   async query(sql: string, params: unknown[] = []): Promise<any[]> {
     try {
-      const result = await this.getPool().query(sql, this.formatParams(params));
+      const executor = this.transactionClient ?? this.getPool();
+      const result = await executor.query(sql, this.formatParams(params));
       return result.rows as any[];
     } catch (err: any) {
       throw new DriverError(`PostgreSQL query error: ${err.message}`);
@@ -241,8 +244,13 @@ export class PostgreSQLDriver extends BaseDriver {
    * @returns {Promise<T>} Result
    */
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.transactionClient) {
+      throw new DriverError("Nested transactions are not supported by the PostgreSQL driver");
+    }
+
     const pool = this.getPool();
     const client = await pool.connect();
+    this.transactionClient = client;
     try {
       await client.query("BEGIN");
       const result = await fn();
@@ -252,6 +260,7 @@ export class PostgreSQLDriver extends BaseDriver {
       await client.query("ROLLBACK");
       throw err;
     } finally {
+      this.transactionClient = null;
       client.release();
     }
   }
