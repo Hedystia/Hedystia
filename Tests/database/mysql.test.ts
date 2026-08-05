@@ -35,6 +35,8 @@ const addScoreColumn = migration("add_score_to_users", {
   },
 });
 
+const isCI = !!process.env.CI;
+
 const mysqlConfigs = [
   { name: "mysql", provider: "mysql2" },
   { name: "mysql", provider: "mysql" },
@@ -70,6 +72,9 @@ for (const config of mysqlConfigs) {
         await db.initialize();
         initialized = true;
       } catch (err: any) {
+        if (isCI) {
+          throw err;
+        }
         if (err.message.includes("ECONNREFUSED")) {
           console.warn(`Skipping tests for ${config.name}-${config.provider}: MySQL not available`);
           return;
@@ -88,7 +93,11 @@ for (const config of mysqlConfigs) {
           await db.posts.truncate();
           await db.users.truncate();
         }
-      } catch {}
+      } catch (err) {
+        if (isCI) {
+          throw err;
+        }
+      }
     });
 
     afterAll(async () => {
