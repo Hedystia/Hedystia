@@ -12,11 +12,11 @@ export type SchemaDefinition = SchemaLike;
 export type Simplify<T> = T extends any ? { [K in keyof T]: T[K] } : never;
 
 export type RequiredKeys<S> = {
-  [K in keyof S]: S[K] extends OptionalSchema<any, any> ? never : K;
+  [K in keyof S]: S[K] extends OptionalSchema<any, any> | { readonly _isDefault: true } ? never : K;
 }[keyof S];
 
 export type OptionalKeys<S> = {
-  [K in keyof S]: S[K] extends OptionalSchema<any, any> ? K : never;
+  [K in keyof S]: S[K] extends OptionalSchema<any, any> | { readonly _isDefault: true } ? K : never;
 }[keyof S];
 
 export type SchemaPrimitiveMap = {
