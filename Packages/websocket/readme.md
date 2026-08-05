@@ -1,111 +1,74 @@
 # @hedystia/ws
 
-Universal WebSocket primitives for [Hedystia](https://docs.hedystia.com).
-
-Works on **Bun**, **Node.js** and **Deno** with a single API.
+Universal WebSocket primitives for Hedystia on Bun, Node.js, and Deno.
 
 ## Install
 
 ```bash
-bun add @hedystia/ws
-# or
-npm install @hedystia/ws
+pnpm add @hedystia/ws
 ```
 
 ## Server
-
-### `serve()` — standalone (recommended)
-
-Auto-detects the runtime and starts a full HTTP+WebSocket server:
 
 ```ts
 import { serve } from "@hedystia/ws";
 
 const server = await serve({
   open: (ws) => ws.subscribe("global"),
-  message: (ws, msg) => ws.publish("global", msg),
+  message: (ws, message) => ws.publish("global", message),
 });
 
-console.log(`Listening on ${server.url}`);
-// Broadcast from anywhere
-server.publish("global", "hello everyone");
-await server.stop();
+server.publish("global", "hello");
+await server.stop(true);
 ```
 
-- **Bun:** delegates to `Bun.serve()` with native WebSocket.
-- **Node/Deno:** creates a `node:http` server with the built-in upgrade handler.
+For an existing Node HTTP server, use `WebSocketServer.upgrade()` with the
+raw `{ rawRequest, socket, head }` upgrade tuple. `WebSocketRequest` is a
+structural request type used by `resolveData`, so runtime-specific request
+objects can be passed without importing Node or Bun types.
 
-### `WebSocketServer` — low-level
+### Socket API
 
-Does **not** open a port. Plug it into any HTTP runtime that exposes raw
-upgrade tuples (`req`, `socket`, `head`).
+| Method | Behavior |
+| --- | --- |
+| `send(message)` | Send text or binary data to this socket |
+| `subscribe(topic)` | Join a topic |
+| `unsubscribe(topic)` | Leave a topic |
+| `publish(topic, message)` | Broadcast to peers, excluding the sender |
+| `isSubscribed(topic)` | Check topic membership |
+| `close(code, reason)` | Start the close handshake |
+| `cork(callback)` | Invoke the callback with this socket |
+| `data` | User-attached connection state |
 
-```ts
-import { createServer } from "node:http";
-import { WebSocketServer } from "@hedystia/ws/server";
-
-const wss = new WebSocketServer({
-  open: (ws) => ws.send("welcome"),
-  message: (ws, message) => ws.publish("room", message),
-});
-
-const http = createServer((_req, res) => res.end("ok"));
-
-http.on("upgrade", (req, socket, head) => {
-  wss.upgrade({ rawRequest: req, socket, head }, { data: { user: "anon" } });
-});
-
-http.listen(3000);
-
-// Broadcast from anywhere
-wss.publish("room", "hello world");
-```
-
-### Socket API (both modes)
-
-| Method | Behaviour |
-|--------|-----------|
-| `ws.send(msg)` | Send to a single socket |
-| `ws.subscribe(topic)` | Join a topic |
-| `ws.unsubscribe(topic)` | Leave a topic |
-| `ws.publish(topic, msg)` | Broadcast to peers (excluding self) |
-| `ws.isSubscribed(topic)` | Membership check |
-| `ws.close(code, reason)` | Close the connection |
-| `ws.cork(cb)` | No-op alias for batching writes |
-| `ws.data` | User-supplied state attached on upgrade |
+The server enforces `maxPayload`, handles fragmentation and ping/pong frames,
+and reports lifecycle errors through the optional `error` callback.
 
 ## Client
 
 ```ts
-import { createWebSocket } from "@hedystia/ws/client";
+import { createWebSocket, WebSocketClient } from "@hedystia/ws/client";
 
-const ws = createWebSocket("ws://localhost:3000", {
-  headers: { authorization: "Bearer ..." },
-});
-
-ws.onopen = () => ws.send("hi");
-ws.onmessage = (event) => console.log(event.data);
-```
-
-A small ergonomic wrapper is also provided:
-
-```ts
-import { WebSocketClient } from "@hedystia/ws/client";
+const ws = createWebSocket("ws://localhost:3000", { protocols: "v1" });
+ws.onopen = () => ws.send("hello");
 
 const client = new WebSocketClient("ws://localhost:3000");
-client.onmessage = (e) => console.log(e.data);
+client.onmessage = (event) => console.log(event.data);
 ```
+
+The client uses the runtime's native WHATWG `WebSocket`. Browser-compatible
+constructors do not allow arbitrary HTTP headers; `ClientWebSocketOptions.headers`
+is therefore reserved for runtimes that explicitly support custom headers and
+is not applied in browsers or standard Node/Deno WebSocket implementations.
 
 ## Runtime detection
 
 ```ts
 import { detectRuntime, isBun, isNode, isDeno } from "@hedystia/ws";
-
-if (detectRuntime() === "bun") {
-  // ...
-}
 ```
 
-## License
+## Documentation
 
-MIT
+- [WebSocket documentation](https://docs.hedystia.com/websocket/start)
+- [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455)
+
+MIT License © 2026 Hedystia
