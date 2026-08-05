@@ -172,11 +172,14 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
     const cleaned = this.toDbKeys(this.cleanData(data));
 
     const params: unknown[] = [];
-    const sql = compileInsert(this.tableName, cleaned, params, this.dialect);
+    const pk = this.registry.getPrimaryKey(this.tableName);
+    let sql = compileInsert(this.tableName, cleaned, params, this.dialect);
+    if (this.dialect === "postgres" && pk) {
+      sql += ` RETURNING ${quoteIdentifier(pk, this.dialect)}`;
+    }
     const result = await this.driver.execute(sql, params);
 
-    const pk = this.registry.getPrimaryKey(this.tableName);
-    if (pk && result.insertId) {
+    if (pk && result.insertId !== undefined && result.insertId !== null) {
       cleaned[pk] = result.insertId;
     }
 
@@ -199,15 +202,25 @@ export class TableRepository<T extends Record<string, any>> implements Repositor
 
     const cleanedData = data.map((item) => this.toDbKeys(this.cleanData(item)));
     const params: unknown[] = [];
-    const sql = compileBulkInsert(this.tableName, cleanedData, params, this.dialect);
+    const pk = this.registry.getPrimaryKey(this.tableName);
+    let sql = compileBulkInsert(this.tableName, cleanedData, params, this.dialect);
+    if (this.dialect === "postgres" && pk) {
+      sql += ` RETURNING ${quoteIdentifier(pk, this.dialect)}`;
+    }
     const result = await this.driver.execute(sql, params);
 
-    const pk = this.registry.getPrimaryKey(this.tableName);
-    if (pk && result.insertId) {
+    if (pk) {
+      const insertIds =
+        Array.isArray(result.insertIds) && result.insertIds.length > 0
+          ? result.insertIds
+          : typeof result.insertId === "number"
+            ? cleanedData.map((row, index) => row[pk] ?? result.insertId + index)
+            : cleanedData.map((row) => row[pk]);
       for (let i = 0; i < cleanedData.length; i++) {
         const row = cleanedData[i];
-        if (row) {
-          row[pk] = result.insertId + i;
+        const insertId = insertIds[i];
+        if (row && insertId !== undefined) {
+          row[pk] = insertId;
         }
       }
     }
