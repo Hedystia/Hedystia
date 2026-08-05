@@ -35,6 +35,8 @@ const addScoreColumn = migration("add_score_to_users", {
   },
 });
 
+const isCI = !!process.env.CI;
+
 describe("PostgreSQL Driver (pg)", () => {
   let initialized = false;
 
@@ -64,6 +66,9 @@ describe("PostgreSQL Driver (pg)", () => {
       await db.initialize();
       initialized = true;
     } catch (err: any) {
+      if (isCI) {
+        throw err;
+      }
       if (err.message.includes("ECONNREFUSED")) {
         console.warn("Skipping tests for PostgreSQL: not available");
         return;
@@ -82,7 +87,11 @@ describe("PostgreSQL Driver (pg)", () => {
         await db.posts.truncate();
         await db.users.truncate();
       }
-    } catch {}
+    } catch (err) {
+      if (isCI) {
+        throw err;
+      }
+    }
   });
 
   afterAll(async () => {
