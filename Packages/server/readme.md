@@ -53,6 +53,48 @@ The server keeps HTTP, WebSocket, and subscription route registries separate.
 The `@hedystia/swagger` plugin documents realtime routes with
 `x-hedystia-websocket` and `x-hedystia-subscription` OpenAPI extensions.
 
+## Security controls
+
+Hedystia provides application-layer protections that can be enabled globally or
+overridden per route:
+
+```ts
+const app = new Hedystia({
+  security: {
+    bodyLimit: 1_024 * 1_024,
+    sanitize: { mode: "strip", trimStrings: true },
+    headers: { preset: "recommended" },
+    requestId: true,
+    rateLimit: {
+      windowMs: 60_000,
+      limit: 100,
+      key: "ip",
+      trustProxy: true, // only when the deployment proxy is trusted
+    },
+    timeout: 10_000,
+  },
+});
+```
+
+Route-level options use the same shape. Set `security: false` only for an
+explicitly public exception; it disables inherited security for that route.
+Schemas remain the authoritative way to validate application data. The built-in
+sanitizer only removes or rejects prototype-pollution keys and applies optional
+resource limits; it does not provide HTML, SQL, or shell escaping. Encode data
+at its output boundary and use parameterized database queries.
+
+The memory rate-limit store is suitable for a single process. Multi-instance
+production deployments should provide a shared, atomic `RateLimitStore` (for
+example, through the appropriate infrastructure adapter). `trustProxy` must be
+enabled only when forwarded client-IP headers are controlled by a trusted
+proxy.
+
+These controls mitigate application-layer abuse. They cannot absorb a
+volumetric network DDoS; use a CDN, WAF, load balancer, or cloud DDoS service
+for that layer. HTTP routes and SSE use the HTTP security configuration;
+WebSocket message and connection limits should additionally be configured with
+WebSocket-specific options and deployment controls.
+
 ## Production notes
 
 - Use the runtime adapter appropriate for Bun, Node.js, or another supported
