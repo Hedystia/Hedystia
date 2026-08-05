@@ -15,6 +15,58 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: true
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: hedystia_test
+      MYSQL_USER: hedystia
+      MYSQL_PASSWORD: hedystia
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: hedystia_test
+      POSTGRES_USER: hedystia
+      POSTGRES_PASSWORD: hedystia
+      S3_URL: http://127.0.0.1:9090
+      S3_KEY_ID: admin
+      S3_ACCESS_KEY: password
+    services:
+      mysql:
+        image: mariadb:11.8
+        env:
+          MARIADB_DATABASE: hedystia_test
+          MARIADB_USER: hedystia
+          MARIADB_PASSWORD: hedystia
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: hedystia_test
+          POSTGRES_USER: hedystia
+          POSTGRES_PASSWORD: hedystia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U hedystia -d hedystia_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      s3:
+        image: adobe/s3mock:5.1
+        ports:
+          - 9090:9090
+        env:
+          COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: hedystia-test,hedystia-test-coltypes
+        options: >-
+          --health-cmd="wget --spider -q http://localhost:9090/favicon.ico"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=12
     steps:
       - name: Checkout
         uses: actions/checkout@v6
