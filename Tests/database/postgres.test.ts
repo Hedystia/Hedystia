@@ -142,6 +142,22 @@ describe("PostgreSQL Driver (pg)", () => {
     });
   });
 
+  describe("insertMany", () => {
+    it("should return generated ids for bulk inserts", async () => {
+      if (!initialized) {
+        return;
+      }
+      const inserted = await db.users.insertMany([
+        { name: "BulkCharlie", email: "bulk-charlie@postgres.com", age: 30 },
+        { name: "BulkDiana", email: "bulk-diana@postgres.com", age: 28 },
+      ]);
+      expect(inserted).toHaveLength(2);
+      expect(inserted[0]?.id).toBeDefined();
+      expect(inserted[1]?.id).toBeDefined();
+      expect(inserted[0]?.id).not.toBe(inserted[1]?.id);
+    });
+  });
+
   describe("find", () => {
     it("should find all rows", async () => {
       if (!initialized) {
