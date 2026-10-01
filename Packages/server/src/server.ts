@@ -337,6 +337,11 @@ export class Hedystia<
 
         if (hasBody) {
           try {
+            const rawRequest = routeSecurity.bodyLimit
+              ? await limitRequestBody(req, routeSecurity.bodyLimit)
+              : req.clone();
+            rawBody = await rawRequest.arrayBuffer();
+
             let parsed = false;
             if (hooks.onParse.length > 0) {
               const cloned = routeSecurity.bodyLimit
