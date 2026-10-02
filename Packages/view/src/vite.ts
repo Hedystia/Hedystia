@@ -29,9 +29,11 @@ function viewJSXPlugin(_options: ViewPluginOptions): Plugin {
     name: "@hedystia/view:jsx",
     config(): UserConfig {
       return {
-        esbuild: {
-          jsx: "automatic",
-          jsxImportSource: "@hedystia/view",
+        oxc: {
+          jsx: {
+            runtime: "automatic",
+            importSource: "@hedystia/view",
+          },
         },
       };
     },
