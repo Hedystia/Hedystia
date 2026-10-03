@@ -705,7 +705,7 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
               `UPDATE \`${tableName}\` SET ${setClauses}${whereSql}`,
               [...setValues, ...whereParams],
             );
-            return result?.changes || 0;
+            return result?.changes ?? result?.affectedRows ?? 0;
           } finally {
             await enableForeignKeys();
           }
@@ -831,7 +831,7 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           await disableForeignKeys();
           try {
             const result = await driver.execute(`DELETE FROM \`${tableName}\`${whereSql}`, params);
-            return result?.changes || 0;
+            return result?.changes ?? result?.affectedRows ?? 0;
           } finally {
             await enableForeignKeys();
           }
