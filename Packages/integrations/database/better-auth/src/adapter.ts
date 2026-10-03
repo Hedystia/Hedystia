@@ -707,6 +707,80 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           }
         },
 
+        async incrementOne({ model, where, increment, set }) {
+          const defaultModelName = getDefaultModelName(model);
+          const tableName = getModelName(model);
+          const driver = db.getDriver();
+          const { sql: whereSql, params } = buildWhereSql(model, "incrementOne", where);
+          const existing = await driver.query(
+            `SELECT * FROM \`${tableName}\`${whereSql} LIMIT 1`,
+            params,
+          );
+          const row = existing[0];
+          if (!row) {
+            return null;
+          }
+
+          const transformedSet = set
+            ? await transformInput(set as Record<string, unknown>, defaultModelName, "update")
+            : {};
+          const increments = Object.entries(increment ?? {}) as [string, number][];
+          const incrementFields = new Set(increments.map(([field]) => field));
+          const setEntries = Object.entries(transformedSet as Record<string, unknown>).filter(
+            ([field, value]) => value !== undefined && !incrementFields.has(field),
+          );
+          const assignments = setEntries.map(([field]) => `\`${field}\` = ?`);
+          const values = setEntries.map(([, value]) => {
+            if (value instanceof Date) {
+              return value.toISOString();
+            }
+            if (typeof value === "object" && value !== null) {
+              return JSON.stringify(value);
+            }
+            return value;
+          });
+          const updated = { ...row };
+
+          for (const [field, delta] of increments) {
+            const current = row[field] == null ? 0 : Number(row[field]);
+            const next = current + delta;
+            if (!Number.isFinite(current) || !Number.isFinite(delta) || !Number.isFinite(next)) {
+              throw new BetterAuthError(`Cannot increment non-numeric field ${field}`);
+            }
+            assignments.push(`\`${field}\` = COALESCE(\`${field}\`, 0) + ?`);
+            values.push(delta);
+            updated[field] = next;
+          }
+
+          for (const [field, value] of setEntries) {
+            updated[field] = value;
+          }
+
+          if (!assignments.length) {
+            return transformOutput(row, defaultModelName) as Record<string, unknown>;
+          }
+
+          const guardedWhere = whereSql
+            ? ` WHERE (${whereSql.slice(7)}) AND \`id\` = ?`
+            : " WHERE `id` = ?";
+          const guardedParams = [...params, row.id];
+
+          await disableForeignKeys();
+          try {
+            const result = await driver.execute(
+              `UPDATE \`${tableName}\` SET ${assignments.join(", ")}${guardedWhere}`,
+              [...values, ...guardedParams],
+            );
+            if ((result?.changes ?? result?.affectedRows ?? 0) !== 1) {
+              return null;
+            }
+          } finally {
+            await enableForeignKeys();
+          }
+
+          return transformOutput(updated, defaultModelName) as Record<string, unknown>;
+        },
+
         async delete({ model, where }) {
           const tableName = getModelName(model);
           const driver = db.getDriver();
@@ -734,6 +808,41 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           } finally {
             await enableForeignKeys();
           }
+        },
+
+        async consumeOne({ model, where }) {
+          const defaultModelName = getDefaultModelName(model);
+          const tableName = getModelName(model);
+          const driver = db.getDriver();
+          const { sql: whereSql, params } = buildWhereSql(model, "consumeOne", where);
+          const rows = await driver.query(
+            `SELECT * FROM \`${tableName}\`${whereSql} LIMIT 1`,
+            params,
+          );
+          const row = rows[0];
+          if (!row) {
+            return null;
+          }
+
+          const guardedWhere = whereSql
+            ? ` WHERE (${whereSql.slice(7)}) AND \`id\` = ?`
+            : " WHERE `id` = ?";
+          const guardedParams = [...params, row.id];
+
+          await disableForeignKeys();
+          try {
+            const result = await driver.execute(
+              `DELETE FROM \`${tableName}\`${guardedWhere}`,
+              guardedParams,
+            );
+            if ((result?.changes ?? result?.affectedRows ?? 0) !== 1) {
+              return null;
+            }
+          } finally {
+            await enableForeignKeys();
+          }
+
+          return transformOutput(row, defaultModelName) as Record<string, unknown>;
         },
 
         async count({ model, where }) {
