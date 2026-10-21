@@ -140,7 +140,9 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
         input: () => this.jsonSchema,
         output: () => this.jsonSchema,
       },
-      validate: (value: unknown): StandardSchemaV1.Result<T> | Promise<StandardSchemaV1.Result<T>> => {
+      validate: (
+        value: unknown,
+      ): StandardSchemaV1.Result<T> | Promise<StandardSchemaV1.Result<T>> => {
         if (typeof value !== "object" || value === null || Array.isArray(value)) {
           return {
             issues: [
