@@ -44,5 +44,5 @@
     "email": "contact@zastinian.com",
     "url": "https://github.com/Zastinian"
   },
-  "packageManager": "pnpm@11.20.0"
+  "packageManager": "pnpm@12.14.0"
 }
