@@ -322,6 +322,14 @@ export function applySecurityResponse(
   requestId?: string,
   rateLimit?: { limit: number; count: number; resetAt: number },
 ): Response {
+  if (
+    (!options.headers || options.headers === false) &&
+    requestId === undefined &&
+    rateLimit === undefined
+  ) {
+    return response;
+  }
+
   const headers = new Headers(response.headers);
   if (options.headers !== false && options.headers) {
     for (const [key, value] of Object.entries(getSecurityHeaders(options.headers))) {
