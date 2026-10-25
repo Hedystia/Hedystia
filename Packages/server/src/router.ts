@@ -14,6 +14,9 @@ function splitPathSegments(path: string): string[] {
 }
 
 function decodeSegment(value: string): string {
+  if (value.indexOf("%") === -1) {
+    return value;
+  }
   try {
     return decodeURIComponent(value);
   } catch {
