@@ -3,7 +3,18 @@ import { SecurityInputError } from "../security";
 export type { DebugLevel } from "./debug";
 export { createLogger } from "./debug";
 
-async function readLimitedBytes(req: Request, maxBytes: number): Promise<Uint8Array> {
+export function parseBodyFromText(text: string, contentType: string): any {
+  if (contentType.includes("application/json")) {
+    return text === "" ? undefined : JSON.parse(text);
+  }
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    const params = new URLSearchParams(text);
+    return Object.fromEntries(params.entries());
+  }
+  return text;
+}
+
+export async function readLimitedBytes(req: Request, maxBytes: number): Promise<Uint8Array> {
   const reader = req.body?.getReader();
   if (!reader) {
     const bytes = new Uint8Array(await req.arrayBuffer());
@@ -66,19 +77,6 @@ export async function parseRequestBody(req: Request, maxBytes?: number): Promise
     throw new SecurityInputError("Request body exceeds the maximum allowed size");
   }
 
-  if (!contentType) {
-    return readLimitedText(req, maxBytes);
-  }
-
-  if (contentType.includes("application/json")) {
-    const text = await readLimitedText(req, maxBytes);
-    return text === "" ? undefined : JSON.parse(text);
-  }
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    const text = await readLimitedText(req, maxBytes);
-    const params = new URLSearchParams(text);
-    return Object.fromEntries(params.entries());
-  }
   if (contentType.includes("multipart/form-data")) {
     if (maxBytes === undefined) {
       return await req.formData();
@@ -95,7 +93,9 @@ export async function parseRequestBody(req: Request, maxBytes?: number): Promise
     });
     return await limitedRequest.formData();
   }
-  return await readLimitedText(req, maxBytes);
+
+  const text = await readLimitedText(req, maxBytes);
+  return parseBodyFromText(text, contentType);
 }
 
 export function isBunHTMLBundle(obj: any): obj is { index: string } {
