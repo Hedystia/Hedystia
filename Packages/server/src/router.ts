@@ -10,7 +10,20 @@ function splitPathSegments(path: string): string[] {
   if (normalized === "/" || normalized === "") {
     return [];
   }
-  return normalized.split("/").filter(Boolean);
+  const out: string[] = [];
+  const len = normalized.length;
+  let start = normalized.charCodeAt(0) === 47 ? 1 : 0;
+  let index = start;
+  while (index <= len) {
+    if (index === len || normalized.charCodeAt(index) === 47) {
+      if (index > start) {
+        out.push(normalized.slice(start, index));
+      }
+      start = index + 1;
+    }
+    index++;
+  }
+  return out;
 }
 
 function decodeSegment(value: string): string {
@@ -45,6 +58,10 @@ export class Router {
   /** Root node of the route tree. */
   readonly root = new Node("/");
 
+  private methodSet = new Set<string>();
+  private hasDynamicRoutes = false;
+  private staticEntries: Record<string, Record<string, MethodEntry>> = Object.create(null);
+
   /**
    * Register a handler for a method and path.
    * @param method HTTP or framework method.
@@ -52,12 +69,14 @@ export class Router {
    * @param handler Value returned when the route matches.
    */
   add(method: string, path: string, handler: RouteHandler): void {
+    this.methodSet.add(method);
     const parts = splitPathSegments(path);
     let current = this.root;
     const paramNames: string[] = [];
 
     for (const part of parts) {
       if (part.startsWith(":")) {
+        this.hasDynamicRoutes = true;
         const name = part.slice(1) || "param";
         paramNames.push(name);
         if (!current.parametric) {
@@ -68,6 +87,7 @@ export class Router {
       }
 
       if (part.startsWith("*")) {
+        this.hasDynamicRoutes = true;
         const name = part.slice(1) || "wildcard";
         paramNames.push(name);
         if (!current.wildcard) {
@@ -83,6 +103,14 @@ export class Router {
 
     current.methods ??= Object.create(null);
     current.methods[method] = { handler, paramNames };
+
+    if (paramNames.length === 0) {
+      const byMethod = (this.staticEntries[path] ??= Object.create(null)) as Record<
+        string,
+        MethodEntry
+      >;
+      byMethod[method] = current.methods[method]!;
+    }
   }
 
   /**
@@ -95,6 +123,19 @@ export class Router {
     method: string,
     path: string,
   ): { handler: RouteHandler; params: Record<string, string> } | null {
+    if (!this.methodSet.has(method)) {
+      return null;
+    }
+
+    const staticEntry = this.staticEntries[path]?.[method];
+    if (staticEntry) {
+      return { handler: staticEntry.handler, params: {} };
+    }
+
+    if (!this.hasDynamicRoutes) {
+      return null;
+    }
+
     const parts = splitPathSegments(path);
     const result = this.match(this.root, parts, 0, method, []);
     if (!result) {
