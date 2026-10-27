@@ -228,6 +228,7 @@ export default class Core<
     path: string;
     schema: RouteSchema;
     handler: RequestHandler;
+    value?: unknown;
     test?: (context: TestContext<any, any, any, any, any>) => Promise<void> | void;
   }[] = [];
   public cors: CorsOptions | undefined = undefined;
@@ -641,6 +642,7 @@ export default class Core<
       method,
       path: fullPath,
       handler: finalHandler,
+      value: typeof handler === "function" ? undefined : handler,
       schema: {
         params: schema.params || ({} as any),
         query: schema.query || ({} as any),
