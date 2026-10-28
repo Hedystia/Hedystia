@@ -53,9 +53,13 @@ export function serveBun<Data extends WSData = WSData>(
     hostname: options.hostname,
     reusePort: options.reusePort,
     idleTimeout: options.idleTimeout,
+    development: false,
     websocket: websocketConfig,
     error: options.error,
-    fetch: (req: Request, _server: any) => options.fetch(req, unified),
+    routes: options.routes as any,
+    fetch: options.directFetch
+      ? (options.directFetch as any)
+      : (req: Request, _server: any) => options.fetch(req, unified),
   });
 
   unified = {

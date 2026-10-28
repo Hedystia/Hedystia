@@ -59,6 +59,9 @@ export interface UnifiedServer<Data extends WSData = WSData> {
  *
  * @typeParam Data - Shape of the user-attached `data` field
  */
+/**
+ * Options forwarded to runtime-specific `serve` implementations.
+ */
 export interface ServeOptions<Data extends WSData = WSData> {
   /** Port to bind. Defaults to a random free port. */
   port?: number;
@@ -75,8 +78,18 @@ export interface ServeOptions<Data extends WSData = WSData> {
    * @param server - Reference to the {@link UnifiedServer} (for `upgrade`)
    */
   fetch: (request: Request, server: UnifiedServer<Data>) => Response | Promise<Response>;
+  /**
+   * Fast path for fetch handlers that never touch the server handle.
+   * When provided, runtimes invoke it with zero wrapper closures.
+   */
+  directFetch?: (request: Request) => Response | Promise<Response>;
   /** Optional WebSocket lifecycle handlers. */
   websocket?: WebSocketHandlers<Data>;
   /** Optional global error handler invoked for uncaught failures. */
   error?: (error: Error) => Response | Promise<Response>;
+  /**
+   * Static routes served natively by Bun's router (Bun only).
+   * Prebuilt `Response` objects keyed by path, then method.
+   */
+  routes?: Record<string, Record<string, Response>>;
 }
