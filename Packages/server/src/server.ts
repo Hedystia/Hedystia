@@ -37,8 +37,196 @@ import {
   determineContentType,
   isBunHTMLBundle,
   limitRequestBody,
+  parseBodyFromText,
   parseRequestBody,
+  readLimitedBytes,
 } from "./utils";
+
+const SHARED_TEXT_ENCODER = new TextEncoder();
+const EMPTY_SECURITY_STATE: SecurityRequestState = {};
+
+class FullRequestContext {
+  public req!: Request;
+  public params!: Record<string, string>;
+  public query: Record<string, string>;
+  public body: any;
+  public rawBody: any;
+  public route: string;
+  public method: string;
+  public publish: any;
+  public requestId?: unknown;
+  public streamResponse: Response | null = null;
+
+  private _raw: Record<string, string> | null = null;
+  private _validatedHeaders: Record<string, string> | null = null;
+  private _set: ResponseContext | null = null;
+  private _stream: StreamContext | null = null;
+  private _streamState: {
+    controller: ReadableStreamDefaultController | null;
+    stream: ReadableStream<Uint8Array> | null;
+  } | null = null;
+  private makeSet: () => ResponseContext;
+
+  constructor(
+    req: Request,
+    params: Record<string, string>,
+    query: Record<string, string>,
+    body: any,
+    rawBody: any,
+    route: string,
+    method: string,
+    publish: any,
+    makeSet: () => ResponseContext,
+  ) {
+    this.req = req;
+    this.params = params;
+    this.query = query;
+    this.body = body;
+    this.rawBody = rawBody;
+    this.route = route;
+    this.method = method;
+    this.publish = publish;
+    this.makeSet = makeSet;
+  }
+
+  initHeaders(raw: Record<string, string>, validated: Record<string, string> | null): void {
+    this._raw = raw;
+    this._validatedHeaders = validated;
+  }
+
+  get rawHeaders(): Record<string, string> {
+    return (this._raw ??= buildRawHeaders(this.req));
+  }
+
+  set rawHeaders(value: Record<string, string>) {
+    this._raw = value;
+  }
+
+  get headers(): Record<string, string> {
+    return this._validatedHeaders ?? (this._raw ??= buildRawHeaders(this.req));
+  }
+
+  set headers(value: Record<string, string>) {
+    this._validatedHeaders = value;
+  }
+
+  get set(): ResponseContext {
+    return (this._set ??= this.makeSet());
+  }
+
+  set set(value: ResponseContext) {
+    this._set = value;
+  }
+
+  get hasSet(): boolean {
+    return this._set !== null;
+  }
+
+  get stream(): StreamContext {
+    if (this._stream) {
+      return this._stream;
+    }
+    const ctx = this;
+    if (!this._streamState) {
+      this._streamState = {
+        controller: null,
+        stream: null,
+      };
+    }
+    const streamState = this._streamState;
+    const streamContext: StreamContext = {
+      write: (chunk: string | Uint8Array) => {
+        if (!streamState.stream) {
+          streamState.stream = new ReadableStream({
+            start(controller) {
+              streamState.controller = controller;
+            },
+          });
+          ctx.streamResponse = new Response(streamState.stream, {
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+        if (streamState.controller) {
+          try {
+            streamState.controller.enqueue(
+              typeof chunk === "string" ? SHARED_TEXT_ENCODER.encode(chunk) : chunk,
+            );
+          } catch {}
+        }
+        return streamContext;
+      },
+      end: (chunk?: string | Uint8Array) => {
+        if (chunk != null) {
+          streamContext.write(chunk);
+        }
+        if (streamState.controller) {
+          try {
+            streamState.controller.close();
+          } catch {}
+        }
+      },
+    };
+    this._stream = streamContext;
+    return streamContext;
+  }
+
+  set stream(value: StreamContext) {
+    this._stream = value;
+  }
+
+  error(statusCode: number, message?: string): never {
+    throw { statusCode, message: message || "Error" };
+  }
+}
+
+function buildRawHeaders(req: Request): Record<string, string> {
+  const rawHeaders: Record<string, string> = {};
+  req.headers.forEach((v, k) => {
+    rawHeaders[k.toLowerCase()] = v;
+  });
+  return rawHeaders;
+}
+
+function parseQuery(url: string): Record<string, string> {
+  const qi = url.indexOf("?");
+  if (qi === -1) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  const pairs = url.split("?", 2)[1] ?? "";
+  if (!pairs) {
+    return out;
+  }
+  for (const pair of pairs.split("&")) {
+    if (!pair) {
+      continue;
+    }
+    const eq = pair.indexOf("=");
+    let key: string;
+    let value: string;
+    if (eq === -1) {
+      key = pair;
+      value = "";
+    } else {
+      key = pair.substring(0, eq);
+      value = pair.substring(eq + 1);
+    }
+    if (key.indexOf("%") !== -1) {
+      try {
+        key = decodeURIComponent(key);
+      } catch {}
+    }
+    if (value.indexOf("%") !== -1) {
+      try {
+        value = decodeURIComponent(value);
+      } catch {}
+    } else if (value.indexOf("+") !== -1) {
+      value = value.replace(/\+/g, " ");
+    }
+    out[key] = value;
+  }
+  return out;
+}
 
 interface FrameworkOptions<H extends ValidationSchema | undefined = undefined> {
   reusePort?: boolean;
@@ -134,32 +322,43 @@ export class Hedystia<
     this.rateLimitStore = new MemoryRateLimitStore();
   }
 
-  static createResponse(data: any, contentType?: string): Response {
+  static createResponse(
+    data: any,
+    contentType?: string,
+    extraHeaders?: Record<string, string>,
+  ): Response {
     if (data instanceof Response) {
       return data;
     }
 
     if (data instanceof ReadableStream) {
-      const headers: Record<string, string> = {};
-      if (contentType) {
-        headers["Content-Type"] = contentType;
-      }
-      return new Response(data, { headers });
+      const fallback: Record<string, string> = contentType
+        ? { "Content-Type": contentType }
+        : {};
+      return new Response(data, { headers: extraHeaders ? { ...fallback, ...extraHeaders } : fallback });
     }
 
     if (contentType === "text/plain" || typeof data === "string") {
-      return new Response(data, {
-        headers: { "Content-Type": contentType || determineContentType(data) },
-      });
+      const resolvedType = contentType || determineContentType(data);
+      const internal = extraHeaders && Object.getPrototypeOf(extraHeaders) === null;
+      const headers: Record<string, string> = internal
+        ? (extraHeaders as Record<string, string>)
+        : extraHeaders
+          ? { ...extraHeaders }
+          : {};
+      if (!headers["content-type"]) {
+        headers["content-type"] = resolvedType;
+      }
+      return new Response(data, { status: 200, headers });
     }
     if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
-      return new Response(data as any);
+      return new Response(data as any, { headers: extraHeaders });
     }
     if (data instanceof Blob) {
-      return new Response(data);
+      return new Response(data, { headers: extraHeaders });
     }
     if (data instanceof FormData) {
-      return new Response(data);
+      return new Response(data, { headers: extraHeaders });
     }
 
     if (isBunHTMLBundle(data)) {
@@ -167,6 +366,14 @@ export class Hedystia<
       if (anyBun) {
         return new Response(anyBun.file(data.index));
       }
+    }
+
+    if (extraHeaders) {
+      const headers = { ...extraHeaders };
+      if (!headers["content-type"]) {
+        headers["content-type"] = "application/json";
+      }
+      return new Response(JSON.stringify(data), { status: 200, headers });
     }
 
     return Response.json(data);
@@ -218,7 +425,8 @@ export class Hedystia<
   }
 
   private composeHandler(route: any) {
-    const hasBody = ["PATCH", "POST", "PUT", "DELETE"].includes(route.method);
+    const hasBody: boolean =
+      route.method === "PATCH" || route.method === "POST" || route.method === "PUT" || route.method === "DELETE";
     const hooks = {
       onRequest: this.onRequestHandlers,
       onTransform: this.onTransformHandlers,
@@ -235,10 +443,235 @@ export class Hedystia<
     const headersSchema = route.schema.headers?.["~standard"];
     const bodySchema = route.schema.body;
     const errorSchema = route.schema.error?.["~standard"];
+    const routeSecurity = mergeSecurityOptions(this.security, route.schema.security);
+    const hasRequestLimits: boolean =
+      routeSecurity.bodyLimit !== undefined ||
+      routeSecurity.maxQueryParameters !== undefined ||
+      routeSecurity.maxQueryDepth !== undefined;
+
+    const isSyncCandidate: boolean =
+      !paramsSchema &&
+      !querySchema &&
+      !headersSchema &&
+      !bodySchema &&
+      !errorSchema &&
+      !hasBody &&
+      hooks.onRequest.length === 0 &&
+      hooks.onParse.length === 0 &&
+      hooks.onTransform.length === 0 &&
+      hooks.onBeforeHandle.length === 0 &&
+      hooks.onAfterHandle.length === 0 &&
+      hooks.onMapResponse.length === 0 &&
+      hooks.onAfterResponse.length === 0 &&
+      hooks.onError.length === 0 &&
+      !routeSecurity.rateLimit &&
+      !routeSecurity.sanitize &&
+      !routeSecurity.requestId &&
+      !routeSecurity.timeout &&
+      !hasRequestLimits;
+
+    if (isSyncCandidate) {
+      const noSecurity = !routeSecurity.headers;
+      const server = this;
+      const publish = this.publish;
+      const routePath = route.path;
+      const routeMethod = route.method;
+
+      class SyncContext {
+        public req: Request;
+        public params: Record<string, string>;
+
+        private _raw: Record<string, string> | null = null;
+        private _set: ResponseContext | null = null;
+        private _stream: StreamContext | null = null;
+        private _streamResponse: Response | null = null;
+
+        constructor(req: Request, params: Record<string, string>) {
+          this.req = req;
+          this.params = params;
+        }
+
+        get rawHeaders(): Record<string, string> {
+          return (this._raw ??= buildRawHeaders(this.req));
+        }
+
+        set rawHeaders(value: Record<string, string>) {
+          this._raw = value;
+        }
+
+        get headers(): Record<string, string> {
+          return this.rawHeaders;
+        }
+
+        set headers(value: Record<string, string>) {
+          this._raw = value;
+        }
+
+        get query(): Record<string, string> {
+          return parseQuery(this.req.url);
+        }
+
+        get route(): string {
+          return routePath;
+        }
+
+        get method(): string {
+          return routeMethod;
+        }
+
+        get publish() {
+          return publish;
+        }
+
+        get set(): ResponseContext {
+          return (this._set ??= server.createResponseContext());
+        }
+
+        set set(value: ResponseContext) {
+          this._set = value;
+        }
+
+        get stream(): StreamContext {
+          if (this._stream) {
+            return this._stream;
+          }
+          const ctx = this;
+          const streamState: {
+            controller: ReadableStreamDefaultController | null;
+            stream: ReadableStream<Uint8Array> | null;
+          } = { controller: null, stream: null };
+          const streamContext: StreamContext = {
+            write: (chunk: string | Uint8Array) => {
+              if (!streamState.stream) {
+                streamState.stream = new ReadableStream({
+                  start(controller) {
+                    streamState.controller = controller;
+                  },
+                });
+                ctx._streamResponse = new Response(streamState.stream, {
+                  headers: { "Content-Type": "text/plain" },
+                });
+              }
+              if (streamState.controller) {
+                try {
+                  streamState.controller.enqueue(
+                    typeof chunk === "string" ? SHARED_TEXT_ENCODER.encode(chunk) : chunk,
+                  );
+                } catch {}
+              }
+              return streamContext;
+            },
+            end: (chunk?: string | Uint8Array) => {
+              if (chunk != null) {
+                streamContext.write(chunk);
+              }
+              if (streamState.controller) {
+                try {
+                  streamState.controller.close();
+                } catch {}
+              }
+            },
+          };
+          this._stream = streamContext;
+          return streamContext;
+        }
+
+        set stream(value: StreamContext) {
+          this._stream = value;
+        }
+
+        error(statusCode: number, message?: string): never {
+          throw { statusCode, message: message || "Error" };
+        }
+
+        finalize(value: any): Response {
+          const streamResponse = this._streamResponse;
+          const responseData = this._set ? (this._set as any).__responseData : undefined;
+
+          let response: Response;
+          if (streamResponse) {
+            response =
+              responseData?.modified && value instanceof Response
+                ? server.applyResponseContext(streamResponse, this._set)
+                : streamResponse;
+          } else if (value instanceof Response) {
+            response = responseData?.modified
+              ? server.applyResponseContext(value, this._set)
+              : value;
+          } else if (!this._set) {
+            response = Hedystia.createResponse(value);
+          } else if (
+            responseData.modified &&
+            responseData.statusCode === 200 &&
+            responseData.cookies.size === 0
+          ) {
+            response = Hedystia.createResponse(value, undefined, responseData.responseHeaders);
+          } else {
+            response = Hedystia.createResponse(value);
+            if (responseData.modified) {
+              response = server.applyResponseContext(response, this._set);
+            }
+          }
+
+          if (noSecurity) {
+            return response;
+          }
+          return applySecurityResponse(response, routeSecurity, undefined, undefined);
+        }
+
+        errorResponse(err: any): Response {
+          if (!this._set) {
+            return new Response(
+              JSON.stringify({
+                message: err?.message || "Internal Server Error",
+                code: err?.statusCode || 500,
+              }),
+              {
+                status: err?.statusCode || 500,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+          let response = new Response(
+            JSON.stringify({
+              message: err?.message || "Internal Server Error",
+              code: err?.statusCode || 500,
+            }),
+            {
+              status: err?.statusCode || 500,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+          response = server.applyResponseContext(response, this._set);
+          if (noSecurity) {
+            return response;
+          }
+          return applySecurityResponse(response, routeSecurity, undefined, undefined);
+        }
+      }
+
+      return (req: Request, params: Record<string, string>) => {
+        const ctx = new SyncContext(req, params);
+        let result: any;
+        try {
+          result = route.handler(ctx);
+        } catch (err: any) {
+          return ctx.errorResponse(err);
+        }
+
+        if (result instanceof Promise || typeof result?.then === "function") {
+          return result.then(
+            (resolved: any) => ctx.finalize(resolved),
+            (err: any) => ctx.errorResponse(err),
+          );
+        }
+
+        return ctx.finalize(result);
+      };
+    }
 
     return async (req: Request, params: Record<string, string>) => {
       let ctx: any;
-      const routeSecurity = mergeSecurityOptions(this.security, route.schema.security);
       const requestId = routeSecurity.requestId
         ? getRequestId(
             req,
@@ -249,7 +682,9 @@ export class Hedystia<
         : undefined;
       let rateLimit: { limit: number; count: number; resetAt: number } | undefined;
       try {
-        assertRequestLimits(req, routeSecurity);
+        if (hasRequestLimits) {
+          assertRequestLimits(req, routeSecurity);
+        }
         if (routeSecurity.rateLimit) {
           const result = await consumeRateLimit(req, routeSecurity.rateLimit, this.rateLimitStore);
           rateLimit = { ...result, limit: routeSecurity.rateLimit.limit };
@@ -258,11 +693,7 @@ export class Hedystia<
           }
         }
         const urlStr = req.url;
-        const qIndex = urlStr.indexOf("?");
-        let query =
-          qIndex !== -1
-            ? Object.fromEntries(new URLSearchParams(urlStr.substring(qIndex)).entries())
-            : {};
+        let query = parseQuery(urlStr);
         if (routeSecurity.sanitize) {
           query = sanitizeInput(
             query,
@@ -306,30 +737,31 @@ export class Hedystia<
           }
         }
 
-        const rawHeaders: Record<string, string> = {};
-        req.headers.forEach((v, k) => {
-          rawHeaders[k.toLowerCase()] = v;
-        });
-
-        let headers: Record<string, string> = { ...rawHeaders };
-        if (this.defaultHeaders) {
-          const globalResult = this.defaultHeaders["~standard"].validate(rawHeaders);
-          if (globalResult && "value" in globalResult) {
-            headers = { ...headers, ...globalResult.value };
+        let rawHeaders: Record<string, string> | null = null;
+        let headers: any;
+        if (this.defaultHeaders || headersSchema) {
+          rawHeaders = buildRawHeaders(req);
+          headers = rawHeaders;
+          if (this.defaultHeaders) {
+            const globalResult = this.defaultHeaders["~standard"].validate(rawHeaders);
+            if (globalResult && "value" in globalResult) {
+              headers = { ...headers, ...globalResult.value };
+            }
           }
-        }
-        if (headersSchema) {
-          const result = headersSchema.validate(rawHeaders);
-          if (result.issues) {
-            throw { statusCode: 400, message: "Invalid header value" };
-          }
-          if ("value" in result) {
-            headers = { ...headers, ...result.value };
+          if (headersSchema) {
+            const result = headersSchema.validate(rawHeaders);
+            if (result.issues) {
+              throw { statusCode: 400, message: "Invalid header value" };
+            }
+            if ("value" in result) {
+              headers = { ...headers, ...result.value };
+            }
           }
         }
         if (routeSecurity.sanitize) {
           const sanitizeOptions = routeSecurity.sanitize === true ? {} : routeSecurity.sanitize;
-          headers = sanitizeInput(headers, sanitizeOptions);
+          rawHeaders ??= buildRawHeaders(req);
+          headers = sanitizeInput(rawHeaders, sanitizeOptions);
         }
 
         let body: any;
@@ -337,16 +769,23 @@ export class Hedystia<
 
         if (hasBody) {
           try {
-            const rawRequest = routeSecurity.bodyLimit
-              ? await limitRequestBody(req, routeSecurity.bodyLimit)
-              : req.clone();
-            rawBody = await rawRequest.arrayBuffer();
+            const contentType = (req.headers.get("Content-Type") || "").toLowerCase();
+            if (contentType.includes("multipart/form-data")) {
+              const rawRequest = routeSecurity.bodyLimit
+                ? await limitRequestBody(req, routeSecurity.bodyLimit)
+                : req.clone();
+              rawBody = await rawRequest.arrayBuffer();
+              body = await parseRequestBody(req, routeSecurity.bodyLimit);
+            } else if (hooks.onParse.length > 0) {
+              const rawRequest = routeSecurity.bodyLimit
+                ? await limitRequestBody(req, routeSecurity.bodyLimit)
+                : req.clone();
+              rawBody = await rawRequest.arrayBuffer();
 
-            let parsed = false;
-            if (hooks.onParse.length > 0) {
               const cloned = routeSecurity.bodyLimit
                 ? await limitRequestBody(req, routeSecurity.bodyLimit)
                 : (req.clone() as unknown as Request);
+              let parsed = false;
               for (let i = 0; i < hooks.onParse.length; i++) {
                 const handler = hooks.onParse[i];
                 if (handler) {
@@ -359,10 +798,20 @@ export class Hedystia<
                   }
                 }
               }
-            }
 
-            if (!parsed) {
-              body = await parseRequestBody(req, routeSecurity.bodyLimit);
+              if (!parsed) {
+                body = await parseRequestBody(req, routeSecurity.bodyLimit);
+              }
+            } else {
+              if (routeSecurity.bodyLimit !== undefined) {
+                const bytes = await readLimitedBytes(req, routeSecurity.bodyLimit);
+                rawBody = bytes;
+                body = parseBodyFromText(new TextDecoder().decode(bytes), contentType);
+              } else {
+              const text = await req.text();
+              rawBody = text;
+              body = parseBodyFromText(text, contentType);
+              }
             }
 
             if (body === "") {
@@ -394,64 +843,21 @@ export class Hedystia<
           }
         }
 
-        const streamState: {
-          response: Response | null;
-          controller: ReadableStreamDefaultController | null;
-          encoder: TextEncoder;
-          stream: ReadableStream<Uint8Array> | null;
-        } = { response: null, controller: null, encoder: new TextEncoder(), stream: null };
-
-        const streamContext = {
-          write: (chunk: string | Uint8Array) => {
-            if (!streamState.stream) {
-              streamState.stream = new ReadableStream({
-                start(controller) {
-                  streamState.controller = controller;
-                },
-              });
-              streamState.response = new Response(streamState.stream, {
-                headers: { "Content-Type": "text/plain" },
-              });
-            }
-            if (streamState.controller) {
-              try {
-                streamState.controller.enqueue(
-                  typeof chunk === "string" ? streamState.encoder.encode(chunk) : chunk,
-                );
-              } catch {}
-            }
-            return streamContext;
-          },
-          end: (chunk?: string | Uint8Array) => {
-            if (chunk != null) {
-              streamContext.write(chunk);
-            }
-            if (streamState.controller) {
-              try {
-                streamState.controller.close();
-              } catch {}
-            }
-          },
-        };
-
-        ctx = {
+        ctx = new FullRequestContext(
           req,
           params,
           query,
-          headers,
-          rawHeaders,
           body,
           rawBody,
-          route: route.path,
-          method: route.method,
-          error: (statusCode: number, message?: string) => {
-            throw { statusCode, message: message || "Error" };
-          },
-          set: this.createResponseContext(),
-          publish: this.publish,
-          stream: streamContext,
-          requestId,
-        };
+          route.path,
+          route.method,
+          this.publish,
+          () => this.createResponseContext(),
+        );
+        ctx.requestId = requestId;
+        if (rawHeaders !== null) {
+          ctx.initHeaders(rawHeaders, headers);
+        }
 
         for (let i = 0; i < hooks.onTransform.length; i++) {
           const handler = hooks.onTransform[i];
@@ -505,13 +911,15 @@ export class Hedystia<
           }
         }
 
-        if (streamState.response) {
-          result = streamState.response;
+        if (ctx.streamResponse) {
+          result = ctx.streamResponse;
         } else if (!(result instanceof Response)) {
           result = Hedystia.createResponse(result);
         }
 
-        result = this.applyResponseContext(result, ctx.set);
+        if (ctx.hasSet) {
+          result = this.applyResponseContext(result, ctx.set);
+        }
 
         if (hooks.onAfterHandle.length > 0) {
           for (let i = 0; i < hooks.onAfterHandle.length; i++) {
@@ -529,7 +937,9 @@ export class Hedystia<
         if (!(result instanceof Response)) {
           result = Hedystia.createResponse(result);
         }
-        result = this.applyResponseContext(result, ctx.set);
+        if (ctx.hasSet) {
+          result = this.applyResponseContext(result, ctx.set);
+        }
 
         if (hooks.onAfterResponse.length > 0) {
           setTimeout(() => {
@@ -633,7 +1043,7 @@ export class Hedystia<
     this.isCompiled = true;
   }
 
-  public async fetch(req: Request): Promise<Response> {
+  public fetch(req: Request): Response | Promise<Response> {
     this.compile();
     const url = req.url;
     const s = url.indexOf("/", 11);
@@ -642,93 +1052,113 @@ export class Hedystia<
     const method = req.method;
 
     if (this.cors && method === "OPTIONS") {
-      const securityState = await this.prepareGlobalSecurity(req);
-      let response = this.applyGlobalSecurity(new Response(null, { status: 204 }), securityState);
-      const corsHeaders = await generateCorsHeaders(this.cors, req);
-      response = await this.applyCorsHeaders(response, req);
-      for (const [key, value] of Object.entries(corsHeaders)) {
-        response.headers.set(key, String(value));
-      }
-      return response;
+      return this.fetchOptions(req);
     }
 
     if (method === "POST") {
       const subscriptionId = req.headers.get("x-hedystia-subscription-id");
       if (subscriptionId) {
-        const conn = this.sseConnections.get(subscriptionId);
-        if (conn?.onMessage) {
-          try {
-            const routeSecurity = this.security;
-            const requestId = routeSecurity.requestId
-              ? getRequestId(
-                  req,
-                  typeof routeSecurity.requestId === "object"
-                    ? routeSecurity.requestId.header
-                    : undefined,
-                )
-              : undefined;
-            assertRequestLimits(req, routeSecurity);
-            const body = await parseRequestBody(req, routeSecurity.bodyLimit);
-            if (routeSecurity.sanitize) {
-              conn.onMessage(
-                sanitizeInput(body, routeSecurity.sanitize === true ? {} : routeSecurity.sanitize),
-              );
-            } else {
-              conn.onMessage(body);
-            }
-            const response = applySecurityResponse(
-              new Response("OK", { status: 200 }),
-              routeSecurity,
-              requestId,
-            );
-            return this.cors
-              ? ((await this.applyCorsHeaders(response, req)) as Response)
-              : response;
-          } catch (error: any) {
-            const response = applySecurityResponse(
-              new Response(error instanceof SecurityInputError ? error.message : "Invalid Body", {
-                status: error instanceof SecurityInputError ? error.statusCode : 400,
-              }),
-              this.security,
-            );
-            return this.cors
-              ? ((await this.applyCorsHeaders(response, req)) as Response)
-              : response;
-          }
-        } else {
-          const response = new Response("Subscription not found", { status: 404 });
-          return this.cors ? ((await this.applyCorsHeaders(response, req)) as Response) : response;
-        }
+        return this.fetchSseMessage(req, subscriptionId);
       }
     }
 
-    const fastStatic = this.staticRoutesFast.get(path);
-    if (fastStatic && method === "GET") {
-      const securityState = await this.prepareGlobalSecurity(req);
-      if (securityState.rejection) {
-        let response = this.applyGlobalSecurity(new Response(null), securityState);
-        if (this.cors) {
-          response = await this.applyCorsHeaders(response, req);
-        }
-        return response;
+    if (this.staticRoutesFast.size !== 0 && method === "GET") {
+      const fastStatic = this.staticRoutesFast.get(path);
+      if (fastStatic) {
+        return fastStatic(req).then(async (response: Response) => {
+          const securityState = await this.prepareGlobalSecurity(req);
+          if (securityState.rejection) {
+            let rejected = this.applyGlobalSecurity(new Response(null), securityState);
+            if (this.cors) {
+              rejected = await this.applyCorsHeaders(rejected, req);
+            }
+            return rejected;
+          }
+          let finalResponse = this.applyGlobalSecurity(response, securityState);
+          if (this.cors) {
+            finalResponse = await this.applyCorsHeaders(finalResponse, req);
+          }
+          return finalResponse;
+        });
       }
-      let response = await fastStatic(req);
-      response = this.applyGlobalSecurity(response, securityState);
-      if (this.cors) {
-        response = await this.applyCorsHeaders(response, req);
-      }
-      return response;
     }
 
     const match = this.router.find(method, path);
     if (match) {
-      const response = await match.handler(req, match.params);
+      const response = match.handler(req, match.params);
       if (this.cors) {
-        return await this.applyCorsHeaders(response, req);
+        return (response instanceof Promise ? response : Promise.resolve(response)).then(
+          (settled: Response) => this.applyCorsHeaders(settled, req),
+        ) as Promise<Response>;
       }
       return response;
     }
 
+    return this.fetchUnmatched(req, path);
+
+  }
+
+  private async fetchOptions(req: Request): Promise<Response> {
+    const securityState = await this.prepareGlobalSecurity(req);
+    let response = this.applyGlobalSecurity(new Response(null, { status: 204 }), securityState);
+    const corsHeaders = await generateCorsHeaders(this.cors, req);
+    response = await this.applyCorsHeaders(response, req);
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      response.headers.set(key, String(value));
+    }
+    return response;
+  }
+
+  private async fetchSseMessage(
+    req: Request,
+    subscriptionId: string,
+  ): Promise<Response> {
+    const conn = this.sseConnections.get(subscriptionId);
+    if (conn?.onMessage) {
+      try {
+        const routeSecurity = this.security;
+        const requestId = routeSecurity.requestId
+          ? getRequestId(
+              req,
+              typeof routeSecurity.requestId === "object"
+                ? routeSecurity.requestId.header
+                : undefined,
+            )
+          : undefined;
+        assertRequestLimits(req, routeSecurity);
+        const body = await parseRequestBody(req, routeSecurity.bodyLimit);
+        if (routeSecurity.sanitize) {
+          conn.onMessage(
+            sanitizeInput(body, routeSecurity.sanitize === true ? {} : routeSecurity.sanitize),
+          );
+        } else {
+          conn.onMessage(body);
+        }
+        const response = applySecurityResponse(
+          new Response("OK", { status: 200 }),
+          routeSecurity,
+          requestId,
+        );
+        return this.cors
+          ? ((await this.applyCorsHeaders(response, req)) as Response)
+          : response;
+      } catch (error: any) {
+        const response = applySecurityResponse(
+          new Response(error instanceof SecurityInputError ? error.message : "Invalid Body", {
+            status: error instanceof SecurityInputError ? error.statusCode : 400,
+          }),
+          this.security,
+        );
+        return this.cors
+          ? ((await this.applyCorsHeaders(response, req)) as Response)
+          : response;
+      }
+    }
+    const response = new Response("Subscription not found", { status: 404 });
+    return this.cors ? ((await this.applyCorsHeaders(response, req)) as Response) : response;
+  }
+
+  private async fetchUnmatched(req: Request, path: string): Promise<Response> {
     const preparedSecurity = await this.rejectOrPrepareGlobalSecurity(req);
     if (preparedSecurity.state.rejection) {
       let response = this.applyGlobalSecurity(new Response(null), preparedSecurity.state);
@@ -738,11 +1168,11 @@ export class Hedystia<
       return response;
     }
 
-    req = preparedSecurity.request;
+    const securityRequest = preparedSecurity.request;
     const securityState = preparedSecurity.state;
 
     if (this.genericHandlers.length > 0) {
-      let response = await processGenericHandlers(req, this.genericHandlers, 0);
+      let response = await processGenericHandlers(securityRequest, this.genericHandlers, 0);
       response = this.applyGlobalSecurity(response, securityState);
       if (this.cors) {
         response = await this.applyCorsHeaders(response, req);
@@ -1009,6 +1439,76 @@ export class Hedystia<
     }
   }
 
+  private canPromoteStaticRoutes(): boolean {
+    return (
+      !this.cors &&
+      !this.sseMode &&
+      this.onRequestHandlers.length === 0 &&
+      this.onParseHandlers.length === 0 &&
+      this.onTransformHandlers.length === 0 &&
+      this.onBeforeHandleHandlers.length === 0 &&
+      this.onAfterHandleHandlers.length === 0 &&
+      this.onMapResponseHandlers.length === 0 &&
+      this.onAfterResponseHandlers.length === 0 &&
+      this.onErrorHandlers.length === 0 &&
+      !this.defaultHeaders &&
+      this.wsRoutes.size === 0 &&
+      this.subscriptionHandlers.size === 0 &&
+      this.genericHandlers.length === 0 &&
+      !this.security.bodyLimit &&
+      !this.security.maxQueryParameters &&
+      !this.security.maxQueryDepth &&
+      !this.security.sanitize &&
+      !this.security.rateLimit &&
+      !this.security.requestId &&
+      !this.security.headers
+    );
+  }
+
+  private collectNativeRoutes(): Record<string, Record<string, Response>> | undefined {
+    if (!this.canPromoteStaticRoutes()) {
+      return undefined;
+    }
+
+    const promotableMethods = new Set(["GET", "POST", "PUT", "DELETE", "PATCH"]);
+    let routes: Record<string, Record<string, Response>> | undefined;
+
+    for (const route of this.routes) {
+      if (!promotableMethods.has(route.method) || route.value === undefined) {
+        continue;
+      }
+      if (route.schema.security || Object.keys(route.schema).some((key) => (route.schema as any)[key] === true)) {
+        continue;
+      }
+
+      let response: Response;
+      if (route.value instanceof Response) {
+        response = route.value;
+      } else {
+        if (route.value instanceof ReadableStream) {
+          continue;
+        }
+        response = Hedystia.createResponse(route.value);
+      }
+
+      let byPath = (routes ??= {})[route.path];
+      if (!byPath) {
+        byPath = routes![route.path] = {};
+      }
+      byPath[route.method] = response;
+    }
+
+    for (const staticRoute of this.staticRoutes) {
+      let byPath = (routes ??= {})[staticRoute.path];
+      if (!byPath) {
+        byPath = routes![staticRoute.path] = {};
+      }
+      byPath.GET ??= staticRoute.response;
+    }
+
+    return routes;
+  }
+
   /**
    * Start HTTP server
    *
@@ -1023,6 +1523,8 @@ export class Hedystia<
   listen(port: number, callback?: (server: NonNullable<typeof this.server>) => void): this {
     this.compile();
 
+    const nativeRoutes = this.collectNativeRoutes();
+
     if (this.sseMode) {
       this.registerSSERoutes();
       this.server = serveUnified({
@@ -1030,6 +1532,7 @@ export class Hedystia<
         reusePort: this.reusePort,
         idleTimeout: this.idleTimeout,
         fetch: (req) => this.fetch(req),
+        routes: nativeRoutes,
       }) as unknown as UnifiedServer;
       if (callback) {
         callback(this.server!);
@@ -1069,6 +1572,7 @@ export class Hedystia<
           return this.fetch(req);
         },
         websocket: this.createWebSocketHandlers(),
+        routes: nativeRoutes,
       }) as unknown as UnifiedServer;
       this.startHeartbeat();
     } else {
@@ -1077,6 +1581,8 @@ export class Hedystia<
         reusePort: this.reusePort,
         idleTimeout: this.idleTimeout,
         fetch: (req) => this.fetch(req),
+        directFetch: this.fetch.bind(this),
+        routes: nativeRoutes,
       }) as unknown as UnifiedServer;
     }
 
@@ -1651,29 +2157,32 @@ export class Hedystia<
   private createResponseContext(): ResponseContext {
     const responseData = {
       statusCode: 200,
-      responseHeaders: new Headers(),
+      responseHeaders: Object.create(null) as Record<string, string>,
       cookies: new Map<string, { value: string; options?: CookieOptions }>(),
       modified: false,
     };
 
+    const headerKey = (key: string) => key.toLowerCase();
+
     const headersAPI = {
       set: (key: string, value: string) => {
-        responseData.responseHeaders.set(key, value);
+        responseData.responseHeaders[headerKey(key)] = value;
         responseData.modified = true;
         return context;
       },
-      get: (key: string) => responseData.responseHeaders.get(key),
+      get: (key: string) => responseData.responseHeaders[headerKey(key)] ?? null,
       delete: (key: string) => {
-        responseData.responseHeaders.delete(key);
+        delete responseData.responseHeaders[headerKey(key)];
         responseData.modified = true;
         return context;
       },
       add: (key: string, value: string) => {
-        const existing = responseData.responseHeaders.get(key);
+        const normalizedKey = headerKey(key);
+        const existing = responseData.responseHeaders[normalizedKey];
         if (existing) {
-          responseData.responseHeaders.set(key, `${existing}, ${value}`);
+          responseData.responseHeaders[normalizedKey] = `${existing}, ${value}`;
         } else {
-          responseData.responseHeaders.set(key, value);
+          responseData.responseHeaders[normalizedKey] = value;
         }
         responseData.modified = true;
         return context;
@@ -1712,6 +2221,17 @@ export class Hedystia<
   }
 
   private async prepareGlobalSecurity(req: Request): Promise<SecurityRequestState> {
+    const security = this.security;
+    if (
+      !security.bodyLimit &&
+      !security.maxQueryParameters &&
+      !security.maxQueryDepth &&
+      !security.rateLimit &&
+      !security.requestId
+    ) {
+      return EMPTY_SECURITY_STATE;
+    }
+
     let requestId: string | undefined;
     let rateLimit: { limit: number; count: number; resetAt: number } | undefined;
 
@@ -1823,9 +2343,11 @@ export class Hedystia<
 
     const newHeaders = new Headers(response.headers);
 
-    responseData.responseHeaders.forEach((value: string, key: string) => {
-      newHeaders.set(key, value);
-    });
+    for (const key in responseData.responseHeaders) {
+      if (Object.hasOwn(responseData.responseHeaders, key)) {
+        newHeaders.set(key, responseData.responseHeaders[key]);
+      }
+    }
 
     const cookiesSize = responseData.cookies.size;
     if (cookiesSize > 0) {
@@ -1862,9 +2384,9 @@ export class Hedystia<
     }
 
     responseData.modified = false;
-    responseData.responseHeaders.forEach((_: string, key: string) => {
-      responseData.responseHeaders.delete(key);
-    });
+    for (const key in responseData.responseHeaders) {
+      delete responseData.responseHeaders[key];
+    }
     responseData.cookies.clear();
 
     return new Response(response.body, {
