@@ -105,10 +105,10 @@ export class Router {
     current.methods[method] = { handler, paramNames };
 
     if (paramNames.length === 0) {
-      const byMethod = (this.staticEntries[path] ??= Object.create(null)) as Record<
-        string,
-        MethodEntry
-      >;
+      if (this.staticEntries[path] === undefined) {
+        this.staticEntries[path] = Object.create(null);
+      }
+      const byMethod = this.staticEntries[path] as Record<string, MethodEntry>;
       byMethod[method] = current.methods[method]!;
     }
   }

@@ -80,7 +80,10 @@ describe("Benchmark route contract", () => {
 });
 
 describe("Native static route promotion", () => {
-  const staticApp = new Framework().get("/", "Hi").get("/json-value", { ok: true }).get("/fn", () => "fn");
+  const staticApp = new Framework()
+    .get("/", "Hi")
+    .get("/json-value", { ok: true })
+    .get("/fn", () => "fn");
 
   let port = 0;
   beforeAll(async () => {

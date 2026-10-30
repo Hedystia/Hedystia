@@ -95,7 +95,10 @@ class FullRequestContext {
   }
 
   get rawHeaders(): Record<string, string> {
-    return (this._raw ??= buildRawHeaders(this.req));
+    if (this._raw === null) {
+      this._raw = buildRawHeaders(this.req);
+    }
+    return this._raw;
   }
 
   set rawHeaders(value: Record<string, string>) {
@@ -103,7 +106,10 @@ class FullRequestContext {
   }
 
   get headers(): Record<string, string> {
-    return this._validatedHeaders ?? (this._raw ??= buildRawHeaders(this.req));
+    if (this._validatedHeaders !== null) {
+      return this._validatedHeaders;
+    }
+    return this.rawHeaders;
   }
 
   set headers(value: Record<string, string>) {
@@ -111,7 +117,10 @@ class FullRequestContext {
   }
 
   get set(): ResponseContext {
-    return (this._set ??= this.makeSet());
+    if (this._set === null) {
+      this._set = this.makeSet();
+    }
+    return this._set;
   }
 
   set set(value: ResponseContext) {
@@ -126,7 +135,7 @@ class FullRequestContext {
     if (this._stream) {
       return this._stream;
     }
-    const ctx = this;
+
     if (!this._streamState) {
       this._streamState = {
         controller: null,
@@ -142,7 +151,7 @@ class FullRequestContext {
               streamState.controller = controller;
             },
           });
-          ctx.streamResponse = new Response(streamState.stream, {
+          this.streamResponse = new Response(streamState.stream, {
             headers: { "Content-Type": "text/plain" },
           });
         }
@@ -332,10 +341,10 @@ export class Hedystia<
     }
 
     if (data instanceof ReadableStream) {
-      const fallback: Record<string, string> = contentType
-        ? { "Content-Type": contentType }
-        : {};
-      return new Response(data, { headers: extraHeaders ? { ...fallback, ...extraHeaders } : fallback });
+      const fallback: Record<string, string> = contentType ? { "Content-Type": contentType } : {};
+      return new Response(data, {
+        headers: extraHeaders ? { ...fallback, ...extraHeaders } : fallback,
+      });
     }
 
     if (contentType === "text/plain" || typeof data === "string") {
@@ -426,7 +435,10 @@ export class Hedystia<
 
   private composeHandler(route: any) {
     const hasBody: boolean =
-      route.method === "PATCH" || route.method === "POST" || route.method === "PUT" || route.method === "DELETE";
+      route.method === "PATCH" ||
+      route.method === "POST" ||
+      route.method === "PUT" ||
+      route.method === "DELETE";
     const hooks = {
       onRequest: this.onRequestHandlers,
       onTransform: this.onTransformHandlers,
@@ -492,7 +504,10 @@ export class Hedystia<
         }
 
         get rawHeaders(): Record<string, string> {
-          return (this._raw ??= buildRawHeaders(this.req));
+          if (this._raw === null) {
+            this._raw = buildRawHeaders(this.req);
+          }
+          return this._raw;
         }
 
         set rawHeaders(value: Record<string, string>) {
@@ -524,7 +539,10 @@ export class Hedystia<
         }
 
         get set(): ResponseContext {
-          return (this._set ??= server.createResponseContext());
+          if (this._set === null) {
+            this._set = server.createResponseContext();
+          }
+          return this._set;
         }
 
         set set(value: ResponseContext) {
@@ -535,7 +553,7 @@ export class Hedystia<
           if (this._stream) {
             return this._stream;
           }
-          const ctx = this;
+
           const streamState: {
             controller: ReadableStreamDefaultController | null;
             stream: ReadableStream<Uint8Array> | null;
@@ -548,7 +566,7 @@ export class Hedystia<
                     streamState.controller = controller;
                   },
                 });
-                ctx._streamResponse = new Response(streamState.stream, {
+                this._streamResponse = new Response(streamState.stream, {
                   headers: { "Content-Type": "text/plain" },
                 });
               }
@@ -808,9 +826,9 @@ export class Hedystia<
                 rawBody = bytes;
                 body = parseBodyFromText(new TextDecoder().decode(bytes), contentType);
               } else {
-              const text = await req.text();
-              rawBody = text;
-              body = parseBodyFromText(text, contentType);
+                const text = await req.text();
+                rawBody = text;
+                body = parseBodyFromText(text, contentType);
               }
             }
 
@@ -1095,7 +1113,6 @@ export class Hedystia<
     }
 
     return this.fetchUnmatched(req, path);
-
   }
 
   private async fetchOptions(req: Request): Promise<Response> {
@@ -1109,10 +1126,7 @@ export class Hedystia<
     return response;
   }
 
-  private async fetchSseMessage(
-    req: Request,
-    subscriptionId: string,
-  ): Promise<Response> {
+  private async fetchSseMessage(req: Request, subscriptionId: string): Promise<Response> {
     const conn = this.sseConnections.get(subscriptionId);
     if (conn?.onMessage) {
       try {
@@ -1139,9 +1153,7 @@ export class Hedystia<
           routeSecurity,
           requestId,
         );
-        return this.cors
-          ? ((await this.applyCorsHeaders(response, req)) as Response)
-          : response;
+        return this.cors ? ((await this.applyCorsHeaders(response, req)) as Response) : response;
       } catch (error: any) {
         const response = applySecurityResponse(
           new Response(error instanceof SecurityInputError ? error.message : "Invalid Body", {
@@ -1149,16 +1161,14 @@ export class Hedystia<
           }),
           this.security,
         );
-        return this.cors
-          ? ((await this.applyCorsHeaders(response, req)) as Response)
-          : response;
+        return this.cors ? ((await this.applyCorsHeaders(response, req)) as Response) : response;
       }
     }
     const response = new Response("Subscription not found", { status: 404 });
     return this.cors ? ((await this.applyCorsHeaders(response, req)) as Response) : response;
   }
 
-  private async fetchUnmatched(req: Request, path: string): Promise<Response> {
+  private async fetchUnmatched(req: Request, _path: string): Promise<Response> {
     const preparedSecurity = await this.rejectOrPrepareGlobalSecurity(req);
     if (preparedSecurity.state.rejection) {
       let response = this.applyGlobalSecurity(new Response(null), preparedSecurity.state);
@@ -1477,7 +1487,10 @@ export class Hedystia<
       if (!promotableMethods.has(route.method) || route.value === undefined) {
         continue;
       }
-      if (route.schema.security || Object.keys(route.schema).some((key) => (route.schema as any)[key] === true)) {
+      if (
+        route.schema.security ||
+        Object.keys(route.schema).some((key) => (route.schema as any)[key] === true)
+      ) {
         continue;
       }
 
@@ -1491,17 +1504,23 @@ export class Hedystia<
         response = Hedystia.createResponse(route.value);
       }
 
-      let byPath = (routes ??= {})[route.path];
+      if (routes === undefined) {
+        routes = {};
+      }
+      let byPath = routes[route.path];
       if (!byPath) {
-        byPath = routes![route.path] = {};
+        byPath = routes[route.path] = {};
       }
       byPath[route.method] = response;
     }
 
     for (const staticRoute of this.staticRoutes) {
-      let byPath = (routes ??= {})[staticRoute.path];
+      if (routes === undefined) {
+        routes = {};
+      }
+      let byPath = routes[staticRoute.path];
       if (!byPath) {
-        byPath = routes![staticRoute.path] = {};
+        byPath = routes[staticRoute.path] = {};
       }
       byPath.GET ??= staticRoute.response;
     }
