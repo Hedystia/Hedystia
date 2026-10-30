@@ -7,3 +7,7 @@ pkg/
 target/
 .turbo
 test-results.json
+.agents/
+AGENTS.md
+docs/
+skills-lock.json
