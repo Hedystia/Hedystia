@@ -90,6 +90,27 @@ function writeFrame(socket: Duplex, opcode: number, payload: Buffer): void {
 }
 
 /**
+ * Encode a broadcast payload once so every recipient shares the same bytes.
+ *
+ * @param payload - Coerced {@link WSMessage}
+ * @returns The WebSocket data opcode with the encoded payload
+ *
+ * @internal
+ */
+function encodeDataMessage(payload: string | Buffer | Uint8Array): {
+  opcode: number;
+  buf: Buffer;
+} {
+  if (typeof payload === "string") {
+    return { opcode: OP_TEXT, buf: Buffer.from(payload, "utf8") };
+  }
+  if (Buffer.isBuffer(payload)) {
+    return { opcode: OP_BINARY, buf: payload };
+  }
+  return { opcode: OP_BINARY, buf: Buffer.from(payload) };
+}
+
+/**
  * Incremental streaming RFC 6455 frame parser for masked client→server frames.
  * Handles fragmentation, ping/pong, and close frames internally.
  *
@@ -232,9 +253,10 @@ class FrameParser {
         }
         this.fragments.push(payload);
         if (fin) {
-          const full = Buffer.concat(this.fragments);
-          this.fragments = [];
           const isBinary = this.fragmentOpcode === OP_BINARY;
+          const full =
+            this.fragments.length === 1 ? this.fragments[0] : Buffer.concat(this.fragments);
+          this.fragments.length = 0;
           this.onMessage?.(isBinary ? full : full.toString("utf8"), isBinary);
         }
         return;
@@ -286,6 +308,19 @@ class NativeSocket {
           ? data
           : Buffer.from(data as Uint8Array);
     writeFrame(this.duplex, typeof data === "string" ? OP_TEXT : OP_BINARY, buf);
+  }
+
+  /**
+   * Send payload bytes that are already encoded as a data frame body.
+   *
+   * @param opcode - WebSocket data opcode matching the encoded bytes
+   * @param buf    - Encoded payload shared across recipients
+   */
+  sendEncoded(opcode: number, buf: Buffer): void {
+    if (this.readyState !== 1) {
+      return;
+    }
+    writeFrame(this.duplex, opcode, buf);
   }
 
   /**
@@ -460,11 +495,11 @@ export class WebSocketServer<Data extends WSData = WSData> {
     if (!set || set.size === 0) {
       return 0;
     }
-    const payload = toSendable(message);
+    const { opcode, buf } = encodeDataMessage(toSendable(message));
     let count = 0;
     for (const native of set) {
       if (native.readyState === 1) {
-        native.send(payload);
+        native.sendEncoded(opcode, buf);
         count++;
       }
     }
@@ -655,10 +690,10 @@ export class WebSocketServer<Data extends WSData = WSData> {
       if (!set) {
         return;
       }
-      const payload = toSendable(message);
+      const { opcode, buf } = encodeDataMessage(toSendable(message));
       for (const peer of set) {
         if (peer !== native && peer.readyState === 1) {
-          peer.send(payload);
+          peer.sendEncoded(opcode, buf);
         }
       }
     };
