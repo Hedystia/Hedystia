@@ -557,9 +557,10 @@ export class WebSocketServer<Data extends WSData = WSData> {
           ? raw
           : Buffer.from(raw as Uint8Array)
         : (raw as string);
-      Promise.resolve(this.handlers.message(wrapped, message)).catch((err) =>
-        console.error("[ws] message handler error:", err),
-      );
+      const result = this.handlers.message(wrapped, message);
+      if (result instanceof Promise) {
+        result.catch((err) => console.error("[ws] message handler error:", err));
+      }
     };
 
     native.parser.onClose = (code, reason) => {
