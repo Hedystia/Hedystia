@@ -1,5 +1,5 @@
 import Framework from "hedystia";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const app = new Framework({ cors: false })
   .get("/", () => "Hi")
@@ -79,3 +79,40 @@ describe("Benchmark route contract", () => {
   });
 });
 
+describe("Native static route promotion", () => {
+  const staticApp = new Framework().get("/", "Hi").get("/json-value", { ok: true }).get("/fn", () => "fn");
+
+  let port = 0;
+  beforeAll(async () => {
+    staticApp.listen(0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    port = staticApp.server.port;
+  });
+  afterAll(async () => {
+    await staticApp.server?.stop(true);
+  });
+
+  it("serves registered static values over the wire", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("Hi");
+    expect(response.headers.get("Content-Type")?.includes("text/plain")).toBe(true);
+
+    const json = await fetch(`http://127.0.0.1:${port}/json-value`);
+    expect(await json.json()).toEqual({ ok: true });
+  });
+
+  it("keeps function handlers routed through fetch", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/fn`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("fn");
+  });
+
+  it("still 404s unknown paths and answers OPTIONS", async () => {
+    const missing = await fetch(`http://127.0.0.1:${port}/nope`);
+    expect(missing.status).toBe(404);
+
+    const options = await fetch(`http://127.0.0.1:${port}/`, { method: "OPTIONS" });
+    expect(options.status).toBe(204);
+  });
+});
