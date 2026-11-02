@@ -24,6 +24,64 @@ export type InferOutput<T> = T extends { readonly inferred: infer O }
 
 export type Infer<T> = InferOutput<T>;
 
+export type SchemaOutput<S extends ValidationSchema | undefined, Fallback> = [S] extends [
+  ValidationSchema,
+]
+  ? InferOutput<S>
+  : Fallback;
+
+export type MergeSchemaOutput<RouteSchema, GlobalSchema, Fallback> = [GlobalSchema] extends [
+  ValidationSchema,
+]
+  ? [RouteSchema] extends [ValidationSchema]
+    ? InferOutput<RouteSchema> & InferOutput<GlobalSchema>
+    : Fallback extends object
+      ? InferOutput<GlobalSchema> & Fallback
+      : InferOutput<GlobalSchema>
+  : [RouteSchema] extends [ValidationSchema]
+    ? InferOutput<RouteSchema>
+    : Fallback;
+
+export type GlobalSchemaOutput<G extends ValidationSchema | undefined, Fallback = unknown> = [
+  G,
+] extends [ValidationSchema]
+  ? InferOutput<G>
+  : Fallback;
+
+export type PipeGlobalRoutes<
+  Routes extends RouteDefinition[],
+  GlobalHeaders extends ValidationSchema | undefined = undefined,
+  GlobalParams extends ValidationSchema | undefined = undefined,
+  GlobalQuery extends ValidationSchema | undefined = undefined,
+  GlobalBody extends ValidationSchema | undefined = undefined,
+> = {
+  [K in keyof Routes]: Routes[K] extends RouteDefinition
+    ? Omit<Routes[K], "params" | "query" | "headers" | "body"> &
+        (Routes[K] extends { params: infer P }
+          ? { params: P & GlobalSchemaOutput<GlobalParams, {}> }
+          : {}) &
+        (Routes[K] extends { query: infer Q }
+          ? { query: Q & GlobalSchemaOutput<GlobalQuery, {}> }
+          : {}) &
+        (Routes[K] extends { headers: infer H }
+          ? { headers: H & GlobalSchemaOutput<GlobalHeaders> }
+          : {}) &
+        (Routes[K] extends { body: infer B } ? { body: B & GlobalSchemaOutput<GlobalBody> } : {})
+    : never;
+};
+
+export type GlobalSchemas<
+  Headers extends ValidationSchema | undefined = undefined,
+  Params extends ValidationSchema | undefined = undefined,
+  Query extends ValidationSchema | undefined = undefined,
+  Body extends ValidationSchema | undefined = undefined,
+> = {
+  headers: Headers;
+  params: Params;
+  query: Query;
+  body: Body;
+};
+
 export interface RouteDefinition {
   method: "GET" | "PATCH" | "POST" | "PUT" | "DELETE" | "WS" | "SUB";
   path: string;
@@ -99,15 +157,17 @@ export type InferRouteContext<
   T extends RouteSchema,
   M extends MacroData = {},
   EnabledMacros extends keyof M = never,
+  GlobalParams extends ValidationSchema | undefined = undefined,
+  GlobalQuery extends ValidationSchema | undefined = undefined,
+  GlobalBody extends ValidationSchema | undefined = undefined,
+  GlobalHeaders extends ValidationSchema | undefined = undefined,
 > = {
   req: Request;
-  params: T["params"] extends ValidationSchema ? InferOutput<T["params"]> : {};
-  query: T["query"] extends ValidationSchema ? InferOutput<T["query"]> : {};
-  body: T["body"] extends ValidationSchema ? InferOutput<T["body"]> : unknown;
+  params: MergeSchemaOutput<T["params"], GlobalParams, {}>;
+  query: MergeSchemaOutput<T["query"], GlobalQuery, {}>;
+  body: MergeSchemaOutput<T["body"], GlobalBody, unknown>;
   rawBody?: string | ArrayBuffer | Uint8Array;
-  headers: T["headers"] extends ValidationSchema
-    ? InferOutput<T["headers"]>
-    : Record<string, string | null>;
+  headers: MergeSchemaOutput<T["headers"], GlobalHeaders, Record<string, string | null>>;
   rawHeaders: Record<string, string>;
   error: (statusCode: number, message?: string) => never;
   set: ResponseContext;
@@ -230,7 +290,13 @@ export type SubscriptionContext<
   T extends RouteSchema = {},
   M extends MacroData = {},
   EnabledMacros extends keyof M = never,
-> = Omit<ContextTypes<T>, "set" | "stream"> & {
+  GlobalParams extends ValidationSchema | undefined = undefined,
+  GlobalQuery extends ValidationSchema | undefined = undefined,
+  GlobalHeaders extends ValidationSchema | undefined = undefined,
+> = Omit<ContextTypes<T>, "set" | "stream" | "params" | "query" | "headers"> & {
+  params: MergeSchemaOutput<T["params"], GlobalParams, {}>;
+  query: MergeSchemaOutput<T["query"], GlobalQuery, {}>;
+  headers: MergeSchemaOutput<T["headers"], GlobalHeaders, Record<string, string | null>>;
   ws: ServerWebSocket;
   rawHeaders: Record<string, string>;
   data: T["data"] extends ValidationSchema ? InferOutput<T["data"]> : any;

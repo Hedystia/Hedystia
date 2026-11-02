@@ -11,6 +11,7 @@ import type {
   MacroData,
   MacroResolveFunction,
   MergeMacros,
+  MergeSchemaOutput,
   PrefixRoutes,
   PublishMethod,
   PublishOptions,
@@ -65,6 +66,9 @@ export default class Core<
   Routes extends RouteDefinition[] = [],
   Macros extends MacroData = {},
   GlobalHeaders extends ValidationSchema | undefined = undefined,
+  GlobalParams extends ValidationSchema | undefined = undefined,
+  GlobalQuery extends ValidationSchema | undefined = undefined,
+  GlobalBody extends ValidationSchema | undefined = undefined,
 > {
   protected sseMode = false;
   protected sseConnections: Map<
@@ -204,6 +208,13 @@ export default class Core<
 
   public macros: Record<string, { resolve: MacroResolveFunction<any> }> = {};
 
+  public globals: {
+    headers?: ValidationSchema;
+    params?: ValidationSchema;
+    query?: ValidationSchema;
+    body?: ValidationSchema;
+  } = {};
+
   /**
    * Register a macro configuration to extend request context
    * @param {T} config - Macro configuration object
@@ -214,7 +225,10 @@ export default class Core<
   ): Hedystia<
     Routes,
     Macros & { [K in keyof T]: ReturnType<ReturnType<T[K]>["resolve"]> },
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     for (const [key, macroFactory] of Object.entries(config)) {
       this.macros[key] = macroFactory(true);
@@ -248,14 +262,27 @@ export default class Core<
   >(
     prefix: Prefix,
     callback: (
-      app: Hedystia<[], Macros, GlobalHeaders>,
-    ) => Hedystia<GroupRoutes, Macros, GlobalHeaders>,
+      app: Hedystia<[], Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>,
+    ) => Hedystia<GroupRoutes, Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>,
     schema?: { [K in EnabledMacros]?: true },
-  ): Hedystia<[...Routes, ...PrefixRoutes<Prefix, GroupRoutes>], Macros, GlobalHeaders> {
-    const groupApp = new Hedystia({
-      cors: this.cors,
-      security: this.securityOptions,
-    }) as Hedystia<[], Macros>;
+  ): Hedystia<
+    [...Routes, ...PrefixRoutes<Prefix, GroupRoutes>],
+    Macros,
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
+  > {
+    const groupApp = new Hedystia<[], Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>(
+      {
+        cors: this.cors,
+        security: this.securityOptions,
+        headers: this.globals.headers,
+        params: this.globals.params,
+        query: this.globals.query,
+        body: this.globals.body,
+      },
+    ) as Hedystia<[], Macros>;
     groupApp.prefix = "";
     groupApp.macros = { ...this.macros };
 
@@ -367,7 +394,10 @@ export default class Core<
           message: MessageSchema;
         },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalHeaders
       >,
     ) => any = (
       ctx: SubscriptionContext<
@@ -380,7 +410,10 @@ export default class Core<
           message: MessageSchema;
         },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalHeaders
       >,
     ) => any,
   >(
@@ -404,17 +437,19 @@ export default class Core<
       {
         method: "SUB";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        headers: (Headers extends ValidationSchema ? InferOutput<Headers> : {}) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, {}>;
         data: DataSchema extends ValidationSchema ? InferOutput<DataSchema> : any;
         error: ErrorSchema extends ValidationSchema ? InferOutput<ErrorSchema> : undefined;
         message: MessageSchema extends ValidationSchema ? InferOutput<MessageSchema> : any;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     const fullPath = this.prefix + path;
 
@@ -684,7 +719,11 @@ export default class Core<
       ctx: InferRouteContext<
         { params: Params; query: Query; headers: Headers },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        undefined,
+        GlobalHeaders
       >,
     ) => Response | any | Promise<Response | any>,
     schema: {
@@ -706,18 +745,18 @@ export default class Core<
       {
         method: "GET";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        headers: (Headers extends ValidationSchema
-          ? InferOutput<Headers>
-          : Record<string, string | null>) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, Record<string, string | null>>;
         response: ResponseSchema extends ValidationSchema ? InferOutput<ResponseSchema> : unknown;
         error: ErrorSchema extends ValidationSchema ? InferOutput<ErrorSchema> : undefined;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     this.addRoute("GET", path, handler, schema);
     return this as any;
@@ -751,7 +790,11 @@ export default class Core<
       ctx: InferRouteContext<
         { params: Params; query: Query; body: Body; headers: Headers },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalBody,
+        GlobalHeaders
       >,
     ) => Response | any | Promise<Response | any>,
     schema: {
@@ -773,18 +816,18 @@ export default class Core<
       {
         method: "PATCH";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        body: Body extends ValidationSchema ? InferOutput<Body> : unknown;
-        headers: (Headers extends ValidationSchema
-          ? InferOutput<Headers>
-          : Record<string, string | null>) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        body: MergeSchemaOutput<Body, GlobalBody, unknown>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, Record<string, string | null>>;
         response: ResponseSchema extends ValidationSchema ? InferOutput<ResponseSchema> : unknown;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     this.addRoute("PATCH", path, handler, schema);
     return this as any;
@@ -818,7 +861,11 @@ export default class Core<
       ctx: InferRouteContext<
         { params: Params; query: Query; body: Body; headers: Headers },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalBody,
+        GlobalHeaders
       >,
     ) => Response | any | Promise<Response | any>,
     schema: {
@@ -840,18 +887,18 @@ export default class Core<
       {
         method: "POST";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        body: Body extends ValidationSchema ? InferOutput<Body> : unknown;
-        headers: (Headers extends ValidationSchema
-          ? InferOutput<Headers>
-          : Record<string, string | null>) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        body: MergeSchemaOutput<Body, GlobalBody, unknown>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, Record<string, string | null>>;
         response: ResponseSchema extends ValidationSchema ? InferOutput<ResponseSchema> : unknown;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     this.addRoute("POST", path, handler, schema);
     return this as any;
@@ -885,7 +932,11 @@ export default class Core<
       ctx: InferRouteContext<
         { params: Params; query: Query; body: Body; headers: Headers },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalBody,
+        GlobalHeaders
       >,
     ) => Response | any | Promise<Response | any>,
     schema: {
@@ -907,18 +958,18 @@ export default class Core<
       {
         method: "PUT";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        body: Body extends ValidationSchema ? InferOutput<Body> : unknown;
-        headers: (Headers extends ValidationSchema
-          ? InferOutput<Headers>
-          : Record<string, string | null>) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        body: MergeSchemaOutput<Body, GlobalBody, unknown>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, Record<string, string | null>>;
         response: ResponseSchema extends ValidationSchema ? InferOutput<ResponseSchema> : unknown;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     this.addRoute("PUT", path, handler, schema);
     return this as any;
@@ -952,7 +1003,11 @@ export default class Core<
       ctx: InferRouteContext<
         { params: Params; query: Query; body: Body; headers: Headers },
         Macros,
-        EnabledMacros
+        EnabledMacros,
+        GlobalParams,
+        GlobalQuery,
+        GlobalBody,
+        GlobalHeaders
       >,
     ) => Response | any | Promise<Response | any>,
     schema: {
@@ -974,18 +1029,18 @@ export default class Core<
       {
         method: "DELETE";
         path: Path;
-        params: Params extends ValidationSchema ? InferOutput<Params> : {};
-        query: Query extends ValidationSchema ? InferOutput<Query> : {};
-        body: Body extends ValidationSchema ? InferOutput<Body> : unknown;
-        headers: (Headers extends ValidationSchema
-          ? InferOutput<Headers>
-          : Record<string, string | null>) &
-          (GlobalHeaders extends ValidationSchema ? InferOutput<GlobalHeaders> : {});
+        params: MergeSchemaOutput<Params, GlobalParams, {}>;
+        query: MergeSchemaOutput<Query, GlobalQuery, {}>;
+        body: MergeSchemaOutput<Body, GlobalBody, unknown>;
+        headers: MergeSchemaOutput<Headers, GlobalHeaders, Record<string, string | null>>;
         response: ResponseSchema extends ValidationSchema ? InferOutput<ResponseSchema> : unknown;
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     this.addRoute("DELETE", path, handler, schema);
     return this as any;
@@ -1031,7 +1086,10 @@ export default class Core<
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     let finalResponse: Response;
 
@@ -1138,9 +1196,33 @@ export default class Core<
    * @param {Hedystia<ChildRoutes, ChildMacros>} childFramework - Child framework instance
    * @returns {Hedystia<[...Routes, ...ChildRoutes], MergeMacros<Macros, ChildMacros>>} Combined instance
    */
-  use<ChildRoutes extends RouteDefinition[], ChildMacros extends MacroData = {}>(
-    childFramework: Hedystia<ChildRoutes, ChildMacros>,
-  ): Hedystia<[...Routes, ...ChildRoutes], MergeMacros<Macros, ChildMacros>, GlobalHeaders>;
+  use<
+    ChildRoutes extends RouteDefinition[],
+    ChildMacros extends MacroData = {},
+    ChildHeaders extends ValidationSchema | undefined = undefined,
+    ChildParams extends ValidationSchema | undefined = undefined,
+    ChildQuery extends ValidationSchema | undefined = undefined,
+    ChildBody extends ValidationSchema | undefined = undefined,
+  >(
+    childFramework: Hedystia<
+      ChildRoutes,
+      ChildMacros,
+      ChildHeaders,
+      ChildParams,
+      ChildQuery,
+      ChildBody
+    >,
+  ): Hedystia<
+    [
+      ...Routes,
+      ...PipeGlobalRoutes<ChildRoutes, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>,
+    ],
+    MergeMacros<Macros, ChildMacros>,
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
+  >;
   /**
    * Mount child framework instance with prefix
    * @param {Prefix} prefix - Path prefix
@@ -1151,13 +1233,33 @@ export default class Core<
     Prefix extends string,
     ChildRoutes extends RouteDefinition[],
     ChildMacros extends MacroData = {},
+    ChildHeaders extends ValidationSchema | undefined = undefined,
+    ChildParams extends ValidationSchema | undefined = undefined,
+    ChildQuery extends ValidationSchema | undefined = undefined,
+    ChildBody extends ValidationSchema | undefined = undefined,
   >(
     prefix: Prefix,
-    childFramework: Hedystia<ChildRoutes, ChildMacros>,
+    childFramework: Hedystia<
+      ChildRoutes,
+      ChildMacros,
+      ChildHeaders,
+      ChildParams,
+      ChildQuery,
+      ChildBody
+    >,
   ): Hedystia<
-    [...Routes, ...PrefixRoutes<Prefix, ChildRoutes>],
+    [
+      ...Routes,
+      ...PrefixRoutes<
+        Prefix,
+        PipeGlobalRoutes<ChildRoutes, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>
+      >,
+    ],
     MergeMacros<Macros, ChildMacros>,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   >;
   use<
     PrefixOrChild extends string | Hedystia<any, any>,
@@ -1166,12 +1268,31 @@ export default class Core<
     prefixOrChildFramework: PrefixOrChild,
     maybeChildFramework?: MaybeChild,
   ): PrefixOrChild extends Hedystia<infer ChildRoutes, infer ChildMacros>
-    ? Hedystia<[...Routes, ...ChildRoutes], MergeMacros<Macros, ChildMacros>, GlobalHeaders>
+    ? Hedystia<
+        [
+          ...Routes,
+          ...PipeGlobalRoutes<ChildRoutes, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>,
+        ],
+        MergeMacros<Macros, ChildMacros>,
+        GlobalHeaders,
+        GlobalParams,
+        GlobalQuery,
+        GlobalBody
+      >
     : MaybeChild extends Hedystia<infer ChildRoutes, infer ChildMacros>
       ? Hedystia<
-          [...Routes, ...PrefixRoutes<PrefixOrChild & string, ChildRoutes>],
+          [
+            ...Routes,
+            ...PrefixRoutes<
+              PrefixOrChild & string,
+              PipeGlobalRoutes<ChildRoutes, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>
+            >,
+          ],
           MergeMacros<Macros, ChildMacros>,
-          GlobalHeaders
+          GlobalHeaders,
+          GlobalParams,
+          GlobalQuery,
+          GlobalBody
         >
       : never {
     let prefix = "";
@@ -1188,6 +1309,30 @@ export default class Core<
       childFramework.cors = this.cors;
     } else if (!this.cors && childFramework.cors) {
       this.cors = childFramework.cors;
+    }
+
+    if (childFramework.globals) {
+      for (const route of childFramework.routes) {
+        if (route.schema.headers === undefined && childFramework.globals.headers) {
+          route.schema.headers = childFramework.globals.headers;
+        }
+        if (route.schema.params === undefined && childFramework.globals.params) {
+          route.schema.params = childFramework.globals.params;
+        }
+        if (route.schema.query === undefined && childFramework.globals.query) {
+          route.schema.query = childFramework.globals.query;
+        }
+        if (
+          (route.method === "POST" ||
+            route.method === "PUT" ||
+            route.method === "PATCH" ||
+            route.method === "DELETE") &&
+          route.schema.body === undefined &&
+          childFramework.globals.body
+        ) {
+          route.schema.body = childFramework.globals.body;
+        }
+      }
     }
 
     for (const [key, macro] of Object.entries(childFramework.macros)) {
@@ -1275,12 +1420,25 @@ export default class Core<
    */
   if<IfRoutes extends RouteDefinition[] = []>(
     callback: (
-      app: Hedystia<[], Macros, GlobalHeaders>,
-    ) => Hedystia<IfRoutes, Macros, GlobalHeaders> | undefined,
-  ): Hedystia<[...Routes, ...IfRoutes], Macros, GlobalHeaders> {
-    const ifApp = new Hedystia({
+      app: Hedystia<[], Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>,
+    ) =>
+      | Hedystia<IfRoutes, Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>
+      | undefined,
+  ): Hedystia<
+    [...Routes, ...IfRoutes],
+    Macros,
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
+  > {
+    const ifApp = new Hedystia<[], Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>({
       cors: this.cors,
       security: this.securityOptions,
+      headers: this.globals.headers,
+      params: this.globals.params,
+      query: this.globals.query,
+      body: this.globals.body,
     }) as Hedystia<[], Macros, GlobalHeaders>;
     ifApp.prefix = this.prefix;
     ifApp.macros = { ...this.macros };
@@ -1353,7 +1511,10 @@ export default class Core<
       },
     ],
     Macros,
-    GlobalHeaders
+    GlobalHeaders,
+    GlobalParams,
+    GlobalQuery,
+    GlobalBody
   > {
     const fullPath = this.prefix + path;
     this.wsRoutes.set(fullPath, { ...handler, ...options });

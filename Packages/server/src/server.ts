@@ -237,13 +237,21 @@ function parseQuery(url: string): Record<string, string> {
   return out;
 }
 
-interface FrameworkOptions<H extends ValidationSchema | undefined = undefined> {
+interface FrameworkOptions<
+  H extends ValidationSchema | undefined = undefined,
+  P extends ValidationSchema | undefined = undefined,
+  Q extends ValidationSchema | undefined = undefined,
+  B extends ValidationSchema | undefined = undefined,
+> {
   reusePort?: boolean;
   cors?: CorsOptions | boolean;
   idleTimeout?: number;
   sse?: boolean;
   debugLevel?: DebugLevel;
   headers?: H;
+  params?: P;
+  query?: Q;
+  body?: B;
   security?: SecurityOptions;
 }
 
@@ -263,7 +271,10 @@ export class Hedystia<
   Routes extends RouteDefinition[] = [],
   _Macros extends MacroData = {},
   GlobalHeaders extends ValidationSchema | undefined = undefined,
-> extends Core<Routes, _Macros, GlobalHeaders> {
+  GlobalParams extends ValidationSchema | undefined = undefined,
+  GlobalQuery extends ValidationSchema | undefined = undefined,
+  GlobalBody extends ValidationSchema | undefined = undefined,
+> extends Core<Routes, _Macros, GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody> {
   private reusePort: boolean;
   private idleTimeout: number;
   private router = new Router();
@@ -318,7 +329,7 @@ export class Hedystia<
   private readonly RECONNECT_GRACE_PERIOD = 5000;
   private readonly ACTIVITY_CHECK_TIMEOUT = 5000;
 
-  constructor(options?: FrameworkOptions<GlobalHeaders>) {
+  constructor(options?: FrameworkOptions<GlobalHeaders, GlobalParams, GlobalQuery, GlobalBody>) {
     super();
     this.reusePort = options?.reusePort ?? false;
     this.cors =
@@ -327,6 +338,10 @@ export class Hedystia<
     this.sseMode = options?.sse ?? false;
     this.log = createLogger(options?.debugLevel ?? "none");
     this.defaultHeaders = options?.headers;
+    this.globals.headers = options?.headers;
+    this.globals.params = options?.params;
+    this.globals.query = options?.query;
+    this.globals.body = options?.body;
     this.security = options?.security ?? {};
     this.rateLimitStore = new MemoryRateLimitStore();
   }
@@ -455,6 +470,9 @@ export class Hedystia<
     const headersSchema = route.schema.headers?.["~standard"];
     const bodySchema = route.schema.body;
     const errorSchema = route.schema.error?.["~standard"];
+    const globalParamsSchema = this.globals.params;
+    const globalQuerySchema = this.globals.query;
+    const globalBodySchema = hasBody ? this.globals.body : undefined;
     const routeSecurity = mergeSecurityOptions(this.security, route.schema.security);
     const hasRequestLimits: boolean =
       routeSecurity.bodyLimit !== undefined ||
@@ -467,6 +485,9 @@ export class Hedystia<
       !headersSchema &&
       !bodySchema &&
       !errorSchema &&
+      !globalParamsSchema &&
+      !globalQuerySchema &&
+      !globalBodySchema &&
       !hasBody &&
       hooks.onRequest.length === 0 &&
       hooks.onParse.length === 0 &&
@@ -735,6 +756,26 @@ export class Hedystia<
           }
         }
 
+        if (globalParamsSchema) {
+          const result = globalParamsSchema["~standard"].validate(params);
+          if (result.issues) {
+            throw { statusCode: 400, message: "Invalid params" };
+          }
+          if ("value" in result) {
+            params = { ...params, ...result.value };
+          }
+        }
+
+        if (globalQuerySchema) {
+          const result = globalQuerySchema["~standard"].validate(query);
+          if (result.issues) {
+            throw { statusCode: 400, message: "Invalid query parameters" };
+          }
+          if ("value" in result) {
+            query = { ...query, ...result.value };
+          }
+        }
+
         if (paramsSchema) {
           const result = paramsSchema.validate(params);
           if (result.issues) {
@@ -762,7 +803,10 @@ export class Hedystia<
           headers = rawHeaders;
           if (this.defaultHeaders) {
             const globalResult = this.defaultHeaders["~standard"].validate(rawHeaders);
-            if (globalResult && "value" in globalResult) {
+            if (globalResult.issues) {
+              throw { statusCode: 400, message: "Invalid header value" };
+            }
+            if ("value" in globalResult) {
               headers = { ...headers, ...globalResult.value };
             }
           }
@@ -842,6 +886,25 @@ export class Hedystia<
               );
             }
 
+            if (globalBodySchema?.["~standard"]) {
+              const globalResult = globalBodySchema["~standard"].validate(body);
+              const globalFinal =
+                globalResult instanceof Promise ? await globalResult : globalResult;
+              if (globalFinal.issues) {
+                throw { statusCode: 400, message: "Invalid body" };
+              }
+              if ("value" in globalFinal) {
+                body =
+                  globalFinal.value !== null &&
+                  typeof globalFinal.value === "object" &&
+                  body !== null &&
+                  typeof body === "object" &&
+                  !Array.isArray(globalFinal.value)
+                    ? { ...body, ...globalFinal.value }
+                    : globalFinal.value;
+              }
+            }
+
             if (bodySchema?.["~standard"]) {
               const result = bodySchema["~standard"].validate(body);
               if (result instanceof Promise ? (await result).issues : result.issues) {
@@ -855,7 +918,7 @@ export class Hedystia<
             if (err instanceof SecurityInputError) {
               throw err;
             }
-            if (bodySchema) {
+            if (bodySchema || globalBodySchema) {
               throw { statusCode: 400, message: "Invalid body format" };
             }
           }
@@ -1252,6 +1315,18 @@ export class Hedystia<
           validatedParams = sanitizeInput(validatedParams, sanitizeOptions);
           query = sanitizeInput(query, sanitizeOptions);
         }
+        if (this.globals.params) {
+          const globalResult = this.globals.params["~standard"].validate(params || {}) as any;
+          if ("issues" in globalResult) {
+            return new Response(JSON.stringify({ error: "Invalid params" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if ("value" in globalResult) {
+            validatedParams = { ...validatedParams, ...globalResult.value };
+          }
+        }
         if (handlerData.schema.params) {
           const result = handlerData.schema.params["~standard"].validate(params) as any;
           if ("issues" in result) {
@@ -1264,6 +1339,18 @@ export class Hedystia<
         }
 
         let validatedQuery = query || {};
+        if (this.globals.query) {
+          const globalResult = this.globals.query["~standard"].validate(query || {}) as any;
+          if ("issues" in globalResult) {
+            return new Response(JSON.stringify({ error: "Invalid query" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if ("value" in globalResult) {
+            validatedQuery = { ...validatedQuery, ...globalResult.value };
+          }
+        }
         if (handlerData.schema.query) {
           const result = handlerData.schema.query["~standard"].validate(query) as any;
           if ("issues" in result) {
@@ -1278,7 +1365,13 @@ export class Hedystia<
         let validatedHeaders: Record<string, string> = { ...rawHeaders };
         if (this.defaultHeaders) {
           const globalResult = this.defaultHeaders["~standard"].validate(rawHeaders) as any;
-          if (globalResult && "value" in globalResult) {
+          if ("issues" in globalResult) {
+            return new Response(JSON.stringify({ error: "Invalid headers" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if ("value" in globalResult) {
             validatedHeaders = { ...validatedHeaders, ...globalResult.value };
           }
         }
@@ -1462,6 +1555,9 @@ export class Hedystia<
       this.onAfterResponseHandlers.length === 0 &&
       this.onErrorHandlers.length === 0 &&
       !this.defaultHeaders &&
+      !this.globals.params &&
+      !this.globals.query &&
+      !this.globals.body &&
       this.wsRoutes.size === 0 &&
       this.subscriptionHandlers.size === 0 &&
       this.genericHandlers.length === 0 &&
@@ -1800,6 +1896,18 @@ export class Hedystia<
 
         if (type === "subscribe") {
           let validatedParams = rawParams || {};
+          if (this.globals.params) {
+            const globalResult = this.globals.params["~standard"].validate(
+              rawParams || {},
+            ) as StandardSchemaV1.Result<any>;
+            if ("issues" in globalResult) {
+              console.error("Validation error (params):", globalResult.issues);
+              return;
+            }
+            if ("value" in globalResult) {
+              validatedParams = { ...validatedParams, ...globalResult.value };
+            }
+          }
           if (matchedSub.schema.params) {
             const result = matchedSub.schema.params["~standard"].validate(
               rawParams,
@@ -1811,6 +1919,18 @@ export class Hedystia<
           }
 
           let validatedQuery = query || {};
+          if (this.globals.query && query) {
+            const globalResult = this.globals.query["~standard"].validate(
+              query,
+            ) as StandardSchemaV1.Result<any>;
+            if ("issues" in globalResult) {
+              console.error("Validation error (query):", globalResult.issues);
+              return;
+            }
+            if ("value" in globalResult) {
+              validatedQuery = { ...validatedQuery, ...globalResult.value };
+            }
+          }
           if (matchedSub.schema.query && query) {
             const result = matchedSub.schema.query["~standard"].validate(
               query,
@@ -1827,7 +1947,18 @@ export class Hedystia<
             const globalResult = this.defaultHeaders["~standard"].validate(
               headers || {},
             ) as StandardSchemaV1.Result<any>;
-            if (globalResult && "value" in globalResult) {
+            if ("issues" in globalResult) {
+              console.error("Validation error (headers):", globalResult.issues);
+              ws.send(
+                JSON.stringify({
+                  path: topic,
+                  error: { message: "Validation error", issues: globalResult.issues },
+                  subscriptionId: subscriptionId,
+                }),
+              );
+              return;
+            }
+            if ("value" in globalResult) {
               validatedHeaders = { ...validatedHeaders, ...globalResult.value };
             }
           }
