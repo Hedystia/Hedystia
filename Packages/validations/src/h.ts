@@ -280,6 +280,38 @@ export const h = {
   phone: (): StringSchemaType => h.string().phone(),
   /** Domain string schema. */
   domain: (requireHttpOrHttps = true): StringSchemaType => h.string().domain(requireHttpOrHttps),
+  /** URL string schema. */
+  url: (): StringSchemaType => h.string().url(),
+  /** IPv4 address string schema. */
+  ipv4: (): StringSchemaType => h.string().ipv4(),
+  /** IPv6 address string schema. */
+  ipv6: (): StringSchemaType => h.string().ipv6(),
+  /** IPv4 or IPv6 address string schema. */
+  ip: (): StringSchemaType => h.string().ip(),
+  /** Base64 encoded string schema. */
+  base64: (): StringSchemaType => h.string().base64(),
+  /** Hexadecimal string schema. */
+  hex: (): StringSchemaType => h.string().hex(),
+  /** JSON Web Token string schema. */
+  jwt: (): StringSchemaType => h.string().jwt(),
+  /** ULID string schema. */
+  ulid: (): StringSchemaType => h.string().ulid(),
+  /** Slug string schema. */
+  slug: (): StringSchemaType => h.string().slug(),
+  /** MAC address string schema. */
+  mac: (): StringSchemaType => h.string().mac(),
+  /** 24-hour time string schema. */
+  time: (): StringSchemaType => h.string().time(),
+  /** ISO 8601 date-time string schema. */
+  datetime: (): StringSchemaType => h.string().datetime(),
+  /** ISO 8601 calendar date string schema. */
+  isoDate: (): StringSchemaType => h.string().isoDate(),
+  /** Payment card number string schema. */
+  creditCard: (): StringSchemaType => h.string().creditCard(),
+  /** Semantic version string schema. */
+  semver: (): StringSchemaType => h.string().semver(),
+  /** Non-empty string schema. */
+  nonempty: (): StringSchemaType => h.string().nonempty(),
 
   /**
    * Coerce-then-validate factories. Equivalent to `h.X().coerce()`.
