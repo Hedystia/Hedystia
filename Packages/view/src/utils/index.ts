@@ -40,22 +40,3 @@ export function mergeStyles(
   }
   return result;
 }
-
-/**
- * Checks if a value is a function
- */
-export function isFunction(value: unknown): value is Function {
-  return typeof value === "function";
-}
-
-/**
- * Checks if a value is an object (not null)
- */
-export function isObject(value: unknown): value is object {
-  return typeof value === "object" && value !== null;
-}
-
-/**
- * No-op function
- */
-export function noop(): void {}

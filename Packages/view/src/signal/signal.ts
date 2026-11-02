@@ -27,9 +27,6 @@ export let Listener: Computation<any> | null = null;
 let Updates: Computation<any>[] | null = null;
 
 /** @internal */
-const _Effects: Computation<any>[] | null = null;
-
-/** @internal */
 export let Pending: Computation<any>[] | null = null;
 
 /**

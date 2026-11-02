@@ -7,21 +7,12 @@ export interface ViewPluginOptions {
 
 export interface ViewPluginResult {
   plugins: Plugin[];
-  /**
-   * @deprecated Kept for backwards compatibility. CSS imported by View
-   * components is emitted by the host bundler (Vite/Astro) through the normal
-   * module graph, so manual collection is no longer needed and this map is
-   * always empty.
-   */
-  collectedCSS: Map<string, string>;
 }
 
 export function viewPlugin(options: ViewPluginOptions = {}): ViewPluginResult {
-  const collectedCSS = new Map<string, string>();
-
   const plugins: Plugin[] = [viewJSXPlugin(options)];
 
-  return { plugins, collectedCSS };
+  return { plugins };
 }
 
 function viewJSXPlugin(_options: ViewPluginOptions): Plugin {

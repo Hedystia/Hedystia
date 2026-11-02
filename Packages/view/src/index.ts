@@ -44,9 +44,6 @@ export { batch, createRoot, memo, peek, set, sig, untrack, update, val } from ".
 export { patch, reset, snap, store } from "./store";
 // Style
 export { merge, style, toCssString } from "./style";
-export type { LayoutResult, PreparedText } from "./text";
-// Text
-export { layout, prepare, reactiveLayout } from "./text";
 // Component types
 export type {
   Action,

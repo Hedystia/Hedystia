@@ -125,14 +125,6 @@ export interface SignalOptions<T> {
 }
 
 /**
- * Options for creating a memo
- */
-export interface MemoOptions<T> {
-  equals?: false | ((prev: T, next: T) => boolean);
-  name?: string;
-}
-
-/**
  * Component function type
  */
 export type Component<P extends Record<string, any> = {}> = (props: P) => JSX.Element;
@@ -168,16 +160,6 @@ export interface SuspenseContextType {
   decrement: () => void;
   resolved: boolean;
 }
-
-/**
- * Resource state for reactive data fetching
- */
-export type ResourceState<T> =
-  | { state: "unresolved"; loading: false; error: undefined; data: undefined }
-  | { state: "pending"; loading: true; error: undefined; data: undefined }
-  | { state: "ready"; loading: false; error: undefined; data: T }
-  | { state: "refreshing"; loading: true; error: undefined; data: T }
-  | { state: "errored"; loading: false; error: Error; data: undefined };
 
 /**
  * Resource object returned by load()

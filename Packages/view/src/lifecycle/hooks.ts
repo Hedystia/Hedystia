@@ -5,9 +5,6 @@
  */
 
 import { createRoot, onCleanup as signalOnCleanup } from "../signal";
-import type { Owner } from "../types";
-
-const currentOwner: Owner | null = null;
 
 /**
  * Register a callback to run when the component mounts
@@ -19,20 +16,12 @@ const currentOwner: Owner | null = null;
  * });
  */
 export function onMount(fn: () => undefined | (() => void)): void {
-  if (currentOwner === null) {
-    createRoot(() => {
-      const result = fn();
-      if (typeof result === "function") {
-        signalOnCleanup(result);
-      }
-    });
-    return;
-  }
-
-  const result = fn();
-  if (typeof result === "function") {
-    signalOnCleanup(result);
-  }
+  createRoot(() => {
+    const result = fn();
+    if (typeof result === "function") {
+      signalOnCleanup(result);
+    }
+  });
 }
 
 /**
