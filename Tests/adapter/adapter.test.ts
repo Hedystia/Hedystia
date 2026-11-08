@@ -8,8 +8,7 @@ describe("HedystiaAdapter", () => {
       return { message: "ok" };
     })
     .post("/echo", async (ctx: any) => {
-      const body = await ctx.request.json();
-      return body;
+      return ctx.body;
     });
 
   const hAdapter = adapter(app);
@@ -130,7 +129,7 @@ describe("HedystiaAdapter", () => {
       expect(JSON.parse(result.body)).toEqual({ message: "ok" });
     });
 
-    it.skip("should handle POST requests with body", async () => {
+    it("should handle POST requests with body", async () => {
       const lambda = hAdapter.toLambda();
       const event = {
         rawPath: "/echo",
