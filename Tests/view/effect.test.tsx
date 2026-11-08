@@ -87,4 +87,30 @@ describe("effect()", () => {
     set(count, 2);
     expect(innerRuns).toBe(4); // Only the latest inner effect should run
   });
+
+  it("should not flush until the outermost batch completes", () => {
+    const a = sig(1);
+    const b = sig(2);
+    let runs = 0;
+
+    effect(() => {
+      val(a);
+      val(b);
+      runs++;
+    });
+
+    expect(runs).toBe(1);
+    let runsInsideBatch = -1;
+
+    batch(() => {
+      set(a, 10);
+      batch(() => {
+        set(b, 20);
+      });
+      runsInsideBatch = runs;
+    });
+
+    expect(runsInsideBatch).toBe(1);
+    expect(runs).toBe(2);
+  });
 });
