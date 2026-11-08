@@ -52,8 +52,9 @@ export async function processResponse(response: Response, format: ResponseFormat
     const contentType = response.headers.get("Content-Type") || "";
 
     if (
-      ((format === "text" || contentType.includes("text/plain")) && format !== "blob") ||
-      (contentType.includes("text/html") && format !== "blob")
+      format === "text" ||
+      (format === "json" &&
+        (contentType.includes("text/plain") || contentType.includes("text/html")))
     ) {
       return await response.text();
     }

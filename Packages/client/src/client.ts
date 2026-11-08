@@ -86,7 +86,7 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
             method,
             credentials: credentials ?? clientOptions?.credentials,
             headers: {
-              ...(body && !(body instanceof FormData)
+              ...(body !== undefined && !(body instanceof FormData)
                 ? { "Content-Type": "application/json" }
                 : {}),
               ...clientOptions?.headers,

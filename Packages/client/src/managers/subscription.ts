@@ -9,6 +9,7 @@ type HandlerEntry = {
   callback: SubscriptionCallback;
   unsubscribe: () => void;
   send: (data: any) => void;
+  options?: SubscriptionOptions;
 };
 
 type ConnectionState = {
@@ -60,7 +61,7 @@ export class SubscriptionManager {
     return SubscriptionManager.pathSubscriptionIds.get(path)!;
   }
 
-  private dispatchMessage(path: string, message: any, options?: SubscriptionOptions) {
+  private dispatchMessage(path: string, message: any) {
     const { data, error } = message;
     const conn = this.connections.get(path);
     if (conn) {
@@ -72,9 +73,7 @@ export class SubscriptionManager {
         conn.serverSubscriptionId = message.subscriptionId;
       }
       for (const h of conn.handlers) {
-        if (options?.onMessage) {
-          options.onMessage(message);
-        }
+        h.options?.onMessage?.(message);
         h.callback({ data, error, unsubscribe: h.unsubscribe, send: h.send });
       }
     }
@@ -137,80 +136,94 @@ export class SubscriptionManager {
 
     let connection = this.connections.get(path);
     if (!connection) {
-      const socket = createWebSocket(wsUrl, this.headers ? { headers: this.headers } : undefined);
-      connection = { socket, handlers: [], reconnectAttempts: 0, clientSubscriptionId };
+      connection = { handlers: [], reconnectAttempts: 0, clientSubscriptionId };
       this.connections.set(path, connection);
 
       const connRef = connection;
 
-      socket.onopen = () => {
-        this.log("debug", "WebSocket connected", {
-          path,
-          subscriptionId: connRef.clientSubscriptionId,
-        });
-        connRef.reconnectAttempts = 0;
-        if (connRef.heartbeatInterval) {
-          clearInterval(connRef.heartbeatInterval);
+      const connect = () => {
+        if (connRef.manuallyClosed) {
+          return;
         }
-        connRef.heartbeatInterval = setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) {
-            try {
-              socket.send(JSON.stringify({ type: "ping" }));
-            } catch {
-              clearInterval(connRef.heartbeatInterval);
-            }
-          } else {
-            clearInterval(connRef.heartbeatInterval);
-          }
-        }, this.HEARTBEAT_INTERVAL);
 
-        const subscriptionId = connRef.serverSubscriptionId || connRef.clientSubscriptionId;
-        const payload = {
-          type: "subscribe",
-          path,
-          headers: { ...this.headers, ...options?.headers },
-          query: options?.query,
-          subscriptionId,
-        };
-        this.log("debug", "Subscribing", { path, subscriptionId });
-        socket.send(JSON.stringify(payload));
-      };
+        const socket = createWebSocket(wsUrl, this.headers ? { headers: this.headers } : undefined);
+        connRef.socket = socket;
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-
-          if (message.type === "activity_check" && message.checkId) {
-            this.handleActivityCheck(path, message.checkId, (payload) => {
-              socket.send(JSON.stringify(payload));
-            });
+        socket.onopen = () => {
+          if (connRef.manuallyClosed) {
+            socket.close();
             return;
           }
 
-          this.dispatchMessage(path, message, options);
-        } catch (e) {
-          this.log("error", "Error parsing WS message", e);
-        }
-      };
-
-      socket.onclose = () => {
-        this.log("warn", "WebSocket closed", { path, attempts: connRef.reconnectAttempts });
-        this.cleanupConnection(connRef);
-        if (connRef && !connRef.manuallyClosed) {
-          this.log("debug", "WebSocket reconnecting", {
+          this.log("debug", "WebSocket connected", {
             path,
-            attempt: (connRef.reconnectAttempts || 0) + 1,
+            subscriptionId: connRef.clientSubscriptionId,
           });
-          connRef.reconnectTimeout = this.scheduleReconnect(connRef, () => {
-            this.connections.delete(path);
-            this.subscribeWithWebSocket(path, callback, options);
-          });
-        }
+          connRef.reconnectAttempts = 0;
+          if (connRef.heartbeatInterval) {
+            clearInterval(connRef.heartbeatInterval);
+          }
+          connRef.heartbeatInterval = setInterval(() => {
+            const current = connRef.socket;
+            if (current?.readyState === WebSocket.OPEN) {
+              try {
+                current.send(JSON.stringify({ type: "ping" }));
+              } catch {
+                clearInterval(connRef.heartbeatInterval);
+              }
+            } else {
+              clearInterval(connRef.heartbeatInterval);
+            }
+          }, this.HEARTBEAT_INTERVAL);
+
+          const subscriptionId = connRef.serverSubscriptionId || connRef.clientSubscriptionId;
+          const payload = {
+            type: "subscribe",
+            path,
+            headers: { ...this.headers, ...options?.headers },
+            query: options?.query,
+            subscriptionId,
+          };
+          this.log("debug", "Subscribing", { path, subscriptionId });
+          socket.send(JSON.stringify(payload));
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+
+            if (message.type === "activity_check" && message.checkId) {
+              this.handleActivityCheck(path, message.checkId, (payload) => {
+                socket.send(JSON.stringify(payload));
+              });
+              return;
+            }
+
+            this.dispatchMessage(path, message);
+          } catch (e) {
+            this.log("error", "Error parsing WS message", e);
+          }
+        };
+
+        socket.onclose = () => {
+          this.log("warn", "WebSocket closed", { path, attempts: connRef.reconnectAttempts });
+          this.cleanupConnection(connRef);
+          connRef.socket = undefined;
+          if (!connRef.manuallyClosed) {
+            this.log("debug", "WebSocket reconnecting", {
+              path,
+              attempt: (connRef.reconnectAttempts || 0) + 1,
+            });
+            connRef.reconnectTimeout = this.scheduleReconnect(connRef, connect);
+          }
+        };
+
+        socket.onerror = (error) => {
+          this.log("error", "WebSocket error", { path, error });
+        };
       };
 
-      socket.onerror = (error) => {
-        this.log("error", "WebSocket error", { path, error });
-      };
+      connect();
     }
 
     const send = (data: any) => {
@@ -239,23 +252,25 @@ export class SubscriptionManager {
       conn.handlers = conn.handlers.filter((h) => h.id !== id);
       if (conn.handlers.length === 0) {
         this.cleanupConnection(conn);
-        if (conn.socket && conn.socket.readyState === WebSocket.OPEN) {
-          const subscriptionId = conn.serverSubscriptionId || conn.clientSubscriptionId;
-          this.log("debug", "Sending unsubscribe message", { path, subscriptionId });
-          const payload = {
-            type: "unsubscribe",
-            path,
-            subscriptionId,
-          };
-          conn.socket.send(JSON.stringify(payload));
-          conn.manuallyClosed = true;
+        conn.manuallyClosed = true;
+        if (conn.socket) {
+          if (conn.socket.readyState === WebSocket.OPEN) {
+            const subscriptionId = conn.serverSubscriptionId || conn.clientSubscriptionId;
+            this.log("debug", "Sending unsubscribe message", { path, subscriptionId });
+            const payload = {
+              type: "unsubscribe",
+              path,
+              subscriptionId,
+            };
+            conn.socket.send(JSON.stringify(payload));
+          }
           conn.socket.close();
         }
         this.connections.delete(path);
       }
     };
 
-    connection.handlers.push({ id, callback, unsubscribe, send });
+    connection.handlers.push({ id, callback, unsubscribe, send, options });
 
     return { unsubscribe, send };
   }
@@ -380,7 +395,7 @@ export class SubscriptionManager {
                       return;
                     }
 
-                    this.dispatchMessage(path, message, options);
+                    this.dispatchMessage(path, message);
                   } catch (e) {
                     this.log("error", "SSE Error processing message", e);
                   }
@@ -431,13 +446,14 @@ export class SubscriptionManager {
       }
     };
 
-    connection.handlers.push({ id, callback, unsubscribe, send });
+    connection.handlers.push({ id, callback, unsubscribe, send, options });
 
     return { unsubscribe, send };
   }
 
   public close() {
     for (const [, conn] of this.connections) {
+      conn.manuallyClosed = true;
       this.cleanupConnection(conn);
       if (conn.abortController) {
         conn.abortController.abort();
