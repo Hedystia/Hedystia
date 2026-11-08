@@ -417,8 +417,7 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
             el.value = s;
           }
         }
-      } catch {
-      }
+      } catch {}
     };
     if (typeof value === "function") {
       effect(() => setProp(value()));
