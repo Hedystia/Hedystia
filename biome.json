@@ -7,7 +7,8 @@
       "!**/dist",
       "!**/.turbo",
       "!**/bun.lock",
-      "!**/test-results.json"
+      "!**/test-results.json",
+      "!**/.agents"
     ]
   },
   "formatter": {
@@ -27,7 +28,8 @@
       "!**/node_modules/",
       "!**/dist/",
       "!**/.vscode/extensions.json",
-      "!**/src/client/types/ClientEvents.d.ts"
+      "!**/src/client/types/ClientEvents.d.ts",
+      "!**/.agents"
     ]
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
