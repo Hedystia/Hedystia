@@ -55,6 +55,9 @@ export abstract class BaseSchema<I, O> implements Schema<I, O> {
   enum<V extends O & (string | number | boolean), Values extends readonly [V, ...V[]]>(
     values: Values,
   ): UnionSchema<I, Values[number]> {
+    if (values.length === 0) {
+      throw new Error("enum() requires a non-empty array of values.");
+    }
     const literalSchemas = values.map((value) => new LiteralSchema<I, V>(value));
     return new UnionSchema<I, Values[number]>(...literalSchemas);
   }
@@ -88,13 +91,13 @@ export abstract class BaseSchema<I, O> implements Schema<I, O> {
     if (result instanceof Promise) {
       return result.then((r) => {
         if (r.issues) {
-          throw new Error(r.issues[0]!.message);
+          throw new Error(r.issues[0]?.message ?? "Validation failed");
         }
         return r.value as O;
       });
     }
     if (result.issues) {
-      throw new Error(result.issues[0]!.message);
+      throw new Error(result.issues[0]?.message ?? "Validation failed");
     }
     return result.value as O;
   }
@@ -254,7 +257,10 @@ export class UnionSchema<I, O> extends BaseSchema<I, O> {
               issues.push(...result.issues);
             }
           }
-          return { issues };
+          return {
+            issues:
+              issues.length > 0 ? issues : [{ message: "Value does not match any union variant" }],
+          };
         };
 
         return validateFrom(0, []);

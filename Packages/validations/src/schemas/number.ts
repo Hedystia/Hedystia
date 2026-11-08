@@ -197,8 +197,12 @@ export class NumberSchemaType extends BaseSchema<unknown, number> {
         if (this._nonpositive && value > 0) {
           return { issues: [{ message: "Number must be less than or equal to 0" }] };
         }
-        if (this._multipleOf !== undefined && value % this._multipleOf !== 0) {
-          return { issues: [{ message: `Number must be a multiple of ${this._multipleOf}` }] };
+        if (this._multipleOf !== undefined) {
+          const quotient = value / this._multipleOf;
+          const nearest = Math.round(quotient);
+          if (Math.abs(quotient - nearest) > 1e-9) {
+            return { issues: [{ message: `Number must be a multiple of ${this._multipleOf}` }] };
+          }
         }
         if (this._finite && !Number.isFinite(value)) {
           return { issues: [{ message: "Expected finite number" }] };

@@ -41,6 +41,8 @@ export function toStandard<T>(schema: AnySchema): Schema<unknown, T> {
     jsonSchema: standardSchema.jsonSchema,
     schema: standardSchema,
     optional: () => new OptionalSchema<unknown, T>(standardSchema),
+    null: standardSchema.null.bind(standardSchema),
+    nullable: standardSchema.nullable.bind(standardSchema),
     enum: standardSchema.enum.bind(standardSchema),
     array: standardSchema.array.bind(standardSchema),
     instanceOf: standardSchema.instanceOf.bind(standardSchema),

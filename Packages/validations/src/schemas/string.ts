@@ -6,6 +6,7 @@ export class StringSchemaType extends BaseSchema<unknown, string> {
   private _validateDate = false;
   private _validateUUID = false;
   private _validateRegex = false;
+  private _pattern?: RegExp;
   private _validateEmail = false;
   private _validatePhone = false;
   private _validateDomain = false;
@@ -99,6 +100,7 @@ export class StringSchemaType extends BaseSchema<unknown, string> {
     const schema = new StringSchemaType();
     Object.assign(schema, this);
     schema._validateRegex = true;
+    schema._pattern = regex;
     schema.jsonSchema = { ...this.jsonSchema, pattern: regex.source };
     return schema;
   }
@@ -476,12 +478,18 @@ export class StringSchemaType extends BaseSchema<unknown, string> {
   }
 
   private _isValidUUID(value: string): boolean {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i;
     return uuidRegex.test(value);
   }
 
   private _isValidRegex(value: string): boolean {
-    return new RegExp(this.jsonSchema.pattern!).test(value);
+    const regex = this._pattern;
+    if (!regex) {
+      return true;
+    }
+    regex.lastIndex = 0;
+    return regex.test(value);
   }
 
   private _isValidEmail(value: string): boolean {
@@ -495,9 +503,9 @@ export class StringSchemaType extends BaseSchema<unknown, string> {
   }
 
   private _isValidDomain(value: string): boolean {
-    let domainRegex = /^[a-z0-9]+([-.]{1}[a-z0-9]+)*\.[a-z]{2,6}$/;
+    let domainRegex = /^[a-z0-9]+([-.]{1}[a-z0-9]+)*\.[a-z]{2,63}$/;
     if (this._requireHttpOrHttps) {
-      domainRegex = /^https?:\/\/[a-z0-9]+([-.]{1}[a-z0-9]+)*\.[a-z]{2,6}$/;
+      domainRegex = /^https?:\/\/[a-z0-9]+([-.]{1}[a-z0-9]+)*\.[a-z]{2,63}$/;
     }
     return domainRegex.test(value);
   }

@@ -75,7 +75,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @returns {ObjectSchemaType<any>} New extended object schema.
    */
   extend(extension: SchemaDefinition): ObjectSchemaType<any> {
-    return new ObjectSchemaType<any>({ ...this.definition, ...extension });
+    return this._withFlags(new ObjectSchemaType<any>({ ...this.definition, ...extension }));
   }
 
   /**
@@ -84,7 +84,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @returns {ObjectSchemaType<any>} Merged object schema.
    */
   merge(other: ObjectSchemaType<any>): ObjectSchemaType<any> {
-    return new ObjectSchemaType<any>({ ...this.definition, ...other.definition });
+    return this._withFlags(new ObjectSchemaType<any>({ ...this.definition, ...other.definition }));
   }
 
   /**
@@ -99,7 +99,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
         next[k] = this.definition[k]!;
       }
     }
-    return new ObjectSchemaType<any>(next);
+    return this._withFlags(new ObjectSchemaType<any>(next));
   }
 
   /**
@@ -112,7 +112,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
     for (const k of keys) {
       delete next[k];
     }
-    return new ObjectSchemaType<any>(next);
+    return this._withFlags(new ObjectSchemaType<any>(next));
   }
 
   /**
@@ -129,7 +129,17 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
         next[key] = item!;
       }
     }
-    return new ObjectSchemaType<Partial<T>>(next);
+    return this._withFlags(new ObjectSchemaType<Partial<T>>(next));
+  }
+
+  /** @internal - Copy unknown-key behavior onto a derived object schema */
+  private _withFlags<S extends Record<string, unknown>>(
+    schema: ObjectSchemaType<S>,
+  ): ObjectSchemaType<S> {
+    schema._strict = this._strict;
+    schema._passthrough = this._passthrough;
+    schema._rebuildJsonSchema();
+    return schema;
   }
 
   get ["~standard"](): CombinedStandardProps<unknown, T> {
