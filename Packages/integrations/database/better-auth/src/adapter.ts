@@ -270,8 +270,10 @@ export interface HedystiaAdapterOptions {
   debugLogs?: boolean;
 }
 
-export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
-  createAdapterFactory({
+export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) => {
+  let adapterRef: any;
+
+  const factory = createAdapterFactory({
     config: {
       adapterId: "hedystia-db",
       adapterName: "Hedystia DB",
@@ -281,14 +283,9 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
       supportsDates: false,
       supportsBooleans: false,
       supportsNumericIds: false,
+      transaction: async (cb) => db.transaction(() => cb(adapterRef)),
     },
-    adapter: ({
-      getModelName,
-      getDefaultModelName,
-      transformInput,
-      transformOutput,
-      transformWhereClause,
-    }) => {
+    adapter: ({ getModelName, getDefaultModelName, getFieldName }) => {
       async function ensureTableAndColumns(
         model: string,
         data: Record<string, unknown>,
@@ -378,12 +375,8 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
         }
       }
 
-      function buildWhereSql(model: string, action: string, where?: CleanedWhere[] | Where[]) {
-        const cleaned = where?.length
-          ? transformWhereClause({ model, where: where as Where[], action: action as any })
-          : [];
-
-        return buildCleanedWhereSql(cleaned);
+      function buildWhereSql(_model: string, _action: string, where?: CleanedWhere[] | Where[]) {
+        return buildCleanedWhereSql((where ?? []) as CleanedWhere[]);
       }
 
       function buildCleanedWhereSql(cleaned: CleanedWhere[]) {
@@ -399,7 +392,7 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           const prefix = i === 0 ? "" : ` ${w.connector ?? "AND"} `;
           const col = `\`${w.field}\``;
 
-          const push = (value: unknown) => {
+          const push = (value: unknown, lower = false) => {
             const v =
               value instanceof Date
                 ? value.toISOString()
@@ -407,22 +400,24 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
                   ? JSON.stringify(value)
                   : value;
             params.push(v);
-            return "?";
+            return lower ? "LOWER(?)" : "?";
           };
+          const insensitive = w.mode === "insensitive";
+          const caseColumn = insensitive ? `LOWER(${col})` : col;
 
           switch (w.operator ?? "eq") {
             case "eq":
               if (w.value === null || w.value === undefined) {
                 parts.push(`${prefix}${col} IS NULL`);
               } else {
-                parts.push(`${prefix}${col} = ${push(w.value)}`);
+                parts.push(`${prefix}${caseColumn} = ${push(w.value, insensitive)}`);
               }
               break;
             case "ne":
               if (w.value === null || w.value === undefined) {
                 parts.push(`${prefix}${col} IS NOT NULL`);
               } else {
-                parts.push(`${prefix}${col} <> ${push(w.value)}`);
+                parts.push(`${prefix}${caseColumn} <> ${push(w.value, insensitive)}`);
               }
               break;
             case "lt":
@@ -438,21 +433,23 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
               parts.push(`${prefix}${col} >= ${push(w.value)}`);
               break;
             case "contains":
-              parts.push(`${prefix}${col} LIKE ${push(`%${String(w.value)}%`)}`);
+              parts.push(
+                `${prefix}${caseColumn} LIKE ${push(`%${String(w.value)}%`, insensitive)}`,
+              );
               break;
             case "starts_with":
-              parts.push(`${prefix}${col} LIKE ${push(`${String(w.value)}%`)}`);
+              parts.push(`${prefix}${caseColumn} LIKE ${push(`${String(w.value)}%`, insensitive)}`);
               break;
             case "ends_with":
-              parts.push(`${prefix}${col} LIKE ${push(`%${String(w.value)}`)}`);
+              parts.push(`${prefix}${caseColumn} LIKE ${push(`%${String(w.value)}`, insensitive)}`);
               break;
             case "in": {
               const values = Array.isArray(w.value) ? w.value : [];
               if (!values.length) {
                 parts.push(`${prefix}1 = 0`);
               } else {
-                const placeholders = values.map((v) => push(v)).join(", ");
-                parts.push(`${prefix}${col} IN (${placeholders})`);
+                const placeholders = values.map((v) => push(v, insensitive)).join(", ");
+                parts.push(`${prefix}${caseColumn} IN (${placeholders})`);
               }
               break;
             }
@@ -461,8 +458,8 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
               if (!values.length) {
                 parts.push(`${prefix}1 = 1`);
               } else {
-                const placeholders = values.map((v) => push(v)).join(", ");
-                parts.push(`${prefix}${col} NOT IN (${placeholders})`);
+                const placeholders = values.map((v) => push(v, insensitive)).join(", ");
+                parts.push(`${prefix}${caseColumn} NOT IN (${placeholders})`);
               }
               break;
             }
@@ -479,13 +476,8 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
       }
 
       return {
-        async create<T>({ model, data, select }: { model: string; data: T; select?: string[] }) {
-          const defaultModelName = getDefaultModelName(model);
-          const transformedData = await transformInput(
-            data as Record<string, unknown>,
-            defaultModelName,
-            "create",
-          );
+        async create<T>({ model, data }: { model: string; data: T; select?: string[] }) {
+          const transformedData = data as Record<string, unknown>;
 
           try {
             await ensureTableAndColumns(model, transformedData as Record<string, unknown>);
@@ -524,19 +516,17 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
             throw new BetterAuthError(`Failed to create ${model}: row not found after insert`);
           }
 
-          return transformOutput(row, defaultModelName, select) as T;
+          return row as T;
         },
 
         async findOne<T>({
           model,
           where,
-          select,
         }: {
           model: string;
           where: Required<Where>[];
           select?: string[];
         }) {
-          const defaultModelName = getDefaultModelName(model);
           const tableName = getModelName(model);
           const driver = db.getDriver();
 
@@ -549,13 +539,14 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           if (!rows[0]) {
             return null;
           }
-          return transformOutput(rows[0], defaultModelName, select) as T;
+          return rows[0] as T;
         },
 
         async findMany<T>({
           model,
           where,
           limit,
+          select,
           sortBy,
           offset,
         }: {
@@ -566,7 +557,6 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           sortBy?: { field: string; direction: "asc" | "desc" };
           offset?: number;
         }) {
-          const defaultModelName = getDefaultModelName(model);
           const tableName = getModelName(model);
           const driver = db.getDriver();
 
@@ -590,10 +580,16 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           } catch {
             return [];
           }
-          const transformed = await Promise.all(
-            rows.map((row: any) => transformOutput(row, defaultModelName)),
-          );
-          return transformed as T[];
+
+          if (select?.length) {
+            const defaultModelName = getDefaultModelName(model);
+            const columns = select.map((field) => getFieldName({ field, model: defaultModelName }));
+            rows = rows.map((row) =>
+              Object.fromEntries(columns.map((column) => [column, row[column]])),
+            );
+          }
+
+          return rows as T[];
         },
 
         async update<T>({
@@ -605,15 +601,10 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           where: Required<Where>[];
           update: T;
         }) {
-          const defaultModelName = getDefaultModelName(model);
           const tableName = getModelName(model);
           const driver = db.getDriver();
 
-          const transformedData = await transformInput(
-            updateData as Record<string, unknown>,
-            defaultModelName,
-            "update",
-          );
+          const transformedData = updateData as Record<string, unknown>;
 
           try {
             await ensureTableAndColumns(model, transformedData as Record<string, unknown>);
@@ -634,7 +625,7 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
             ([, v]) => v !== undefined,
           );
           if (setEntries.length === 0) {
-            return transformOutput(existing[0], defaultModelName) as T;
+            return existing[0] as T;
           }
 
           const setClauses = setEntries.map(([k]) => `\`${k}\` = ?`).join(", ");
@@ -663,21 +654,16 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
           ]);
 
           if (result[0]) {
-            return transformOutput(result[0], defaultModelName) as T;
+            return result[0] as T;
           }
           return null;
         },
 
         async updateMany({ model, where, update: updateData }) {
-          const defaultModelName = getDefaultModelName(model);
           const tableName = getModelName(model);
           const driver = db.getDriver();
 
-          const transformedData = await transformInput(
-            updateData as Record<string, unknown>,
-            defaultModelName,
-            "update",
-          );
+          const transformedData = updateData as Record<string, unknown>;
 
           const setEntries = Object.entries(transformedData as Record<string, unknown>).filter(
             ([, v]) => v !== undefined,
@@ -984,3 +970,10 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) =>
       };
     },
   });
+
+  return (options: any) => {
+    const adapter = factory(options);
+    adapterRef = adapter;
+    return adapter;
+  };
+};
