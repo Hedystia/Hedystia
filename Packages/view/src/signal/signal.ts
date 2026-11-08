@@ -466,20 +466,24 @@ export function untrack<T>(fn: Accessor<T> | Signal<T> | Computed<T> | T): T {
  * Batch multiple signal updates into a single reactive cycle
  */
 export function batch(fn: () => void): void {
-  const prevUpdates = Updates;
+  const isOutermost = Updates === null;
   const prevPending = Pending;
-  Updates = [];
-  Pending = [];
+
+  if (isOutermost) {
+    Updates = [];
+    Pending = [];
+  }
+
   try {
     fn();
   } finally {
-    // Collect all pending updates
-    if (prevPending !== null && prevPending.length > 0) {
-      Pending = prevPending.concat(Pending);
+    if (isOutermost) {
+      if (prevPending !== null && prevPending.length > 0) {
+        Pending = prevPending.concat(Pending ?? []);
+      }
+      Updates = null;
+      flushUpdates();
     }
-    Updates = prevUpdates;
-    // Flush after batch completes
-    flushUpdates();
   }
 }
 

@@ -332,7 +332,7 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
     return;
   }
 
-  const attrName = isSvg ? SVG_ATTR_MAP[key] || key : key;
+  const attrName = isSvg ? SVG_ATTR_MAP[key] || key : key === "htmlFor" ? "for" : key;
 
   if (key.startsWith("on") && typeof value === "function") {
     const eventName = key.slice(2).toLowerCase();
@@ -391,6 +391,40 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
     }
   } else if (key === "ref" && typeof value === "function") {
     tick(() => value(element));
+  } else if ((key === "value" || key === "checked") && !isSvg && key in element) {
+    const setProp = (v: any) => {
+      if (key === "checked") {
+        if (v) {
+          if (!element.hasAttribute(attrName)) {
+            element.setAttribute(attrName, "");
+          }
+        } else if (element.hasAttribute(attrName)) {
+          element.removeAttribute(attrName);
+        }
+      } else if (element.tagName !== "TEXTAREA") {
+        const s = v == null ? "" : String(v);
+        if (element.getAttribute(attrName) !== s) {
+          element.setAttribute(attrName, s);
+        }
+      }
+      try {
+        if (key === "checked") {
+          (element as HTMLInputElement).checked = !!v;
+        } else {
+          const s = v == null ? "" : String(v);
+          const el = element as HTMLInputElement;
+          if (el.value !== s) {
+            el.value = s;
+          }
+        }
+      } catch {
+      }
+    };
+    if (typeof value === "function") {
+      effect(() => setProp(value()));
+    } else {
+      setProp(value);
+    }
   } else if (typeof value === "function" && !key.startsWith("on")) {
     applyReactiveProp(element, attrName, value);
   } else {
@@ -423,9 +457,30 @@ function applyReactiveStyle(
   element: HTMLElement | SVGElement,
   accessor: Accessor<Record<string, any>>,
 ): void {
+  let applied: string[] = [];
   effect(() => {
     const style = accessor();
-    applyStyle(element, style);
+    const next: string[] = [];
+    if (style !== null && typeof style === "object") {
+      for (const key in style) {
+        if (!Object.hasOwn(style, key)) {
+          continue;
+        }
+        const value = style[key];
+        if (value !== undefined && value !== null) {
+          next.push(camelToKebab(key));
+        }
+      }
+    }
+    for (const cssKey of applied) {
+      if (!next.includes(cssKey)) {
+        element.style.removeProperty(cssKey);
+      }
+    }
+    if (style !== null && typeof style === "object") {
+      applyStyle(element, style);
+    }
+    applied = next;
   });
 }
 

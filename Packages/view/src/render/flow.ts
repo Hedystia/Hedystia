@@ -359,6 +359,13 @@ export function Portal(props: { mount?: HTMLElement; children: any }): any {
  * Suspense component for async loading states
  */
 export function Suspense(props: { fallback?: any; children: any }): any {
+  if (!isBrowser) {
+    if (typeof props.children === "function") {
+      return props.children();
+    }
+    return props.children;
+  }
+
   const container = document.createComment("suspense");
   let renderedNodes: Node[] = [];
   let fallbackNodes: Node[] = [];
@@ -399,6 +406,18 @@ export function ErrorBoundary(props: {
   fallback: (err: Error, reset: () => void) => any;
   children: any;
 }): any {
+  if (!isBrowser) {
+    try {
+      if (typeof props.children === "function") {
+        return props.children();
+      }
+      return props.children;
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      return props.fallback(error, () => {});
+    }
+  }
+
   const container = document.createComment("error-boundary");
   let renderedNodes: Node[] = [];
   let error: Error | null = null;

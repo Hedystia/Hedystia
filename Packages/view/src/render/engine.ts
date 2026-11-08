@@ -7,7 +7,7 @@
 import { SVG_ATTR_MAP, SVG_ELEMENTS } from "../jsx/element";
 import { createRoot, Owner } from "../signal";
 import type { Component, Owner as OwnerType } from "../types";
-import { resolveNodes } from "./flow";
+import { flushPending, resolveNodes } from "./flow";
 
 /**
  * Application instance returned by mount
@@ -40,6 +40,9 @@ export function mount(component: Component<{}>, target: HTMLElement): ViewApp {
     for (const node of nodes) {
       target.appendChild(node);
     }
+    // Root-level flow components (Show, For, ...) register their insertions
+    // until their marker is attached; flush them now that it is.
+    flushPending(nodes);
   });
 
   return {
@@ -85,6 +88,13 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Convert a camelCase style property to its CSS kebab-case form
+ */
+function camelToKebab(str: string): string {
+  return str.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+}
+
+/**
  * Serialize a value to an HTML attribute string
  */
 function serializeAttrValue(key: string, value: unknown): string | null {
@@ -94,7 +104,8 @@ function serializeAttrValue(key: string, value: unknown): string | null {
   // Handle style objects
   if (key === "style" && typeof value === "object" && value !== null) {
     return Object.entries(value)
-      .map(([k, v]) => `${k}:${v}`)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${camelToKebab(k)}:${v}`)
       .join(";");
   }
   if (typeof value === "boolean") {
@@ -225,15 +236,26 @@ function renderElement(element: unknown): string {
         innerHTML = val == null ? "" : escapeHtml(String(val));
         continue;
       }
+      let propValue = value;
+      if (
+        typeof value === "function" &&
+        (key === "value" || key === "checked" || key === "selected" || key === "style")
+      ) {
+        propValue = value();
+      }
+      if (key === "value" && tagName === "textarea") {
+        innerHTML = propValue == null ? "" : escapeHtml(String(propValue));
+        continue;
+      }
       let attrName = key === "className" ? "class" : key === "htmlFor" ? "for" : key;
       if (SVG_ELEMENTS.has(tagName)) {
         attrName = SVG_ATTR_MAP[attrName] || attrName;
       }
-      const serialized = serializeAttrValue(key, value);
+      const serialized = serializeAttrValue(key, propValue);
       if (serialized === null) {
         continue;
       }
-      if (typeof value === "boolean" && value) {
+      if (typeof propValue === "boolean" && propValue) {
         attrs.push(attrName);
       } else {
         attrs.push(`${attrName}="${escapeHtml(serialized)}"`);
