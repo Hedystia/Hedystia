@@ -1,7 +1,10 @@
 import {
   authFlowTestSuite,
+  caseInsensitiveTestSuite,
+  joinsTestSuite,
   normalTestSuite,
   testAdapter,
+  transactionsTestSuite,
   uuidTestSuite,
 } from "@better-auth/test-utils/adapter";
 import { hedystiaAdapter } from "@hedystia/better-auth";
@@ -25,21 +28,12 @@ const { execute } = await testAdapter({
     await db.initialize();
   },
   tests: [
-    normalTestSuite({
-      disableTests: {
-        "findOne - should find a model with modified field name": true,
-        "findOne - should join a model with modified field name": true,
-        "findMany - should select fields": true,
-      },
-    }),
+    normalTestSuite(),
     authFlowTestSuite(),
-    uuidTestSuite({
-      disableTests: {
-        "findOne - should find a model with modified field name": true,
-        "findOne - should join a model with modified field name": true,
-        "findMany - should select fields": true,
-      },
-    }),
+    uuidTestSuite(),
+    caseInsensitiveTestSuite(),
+    joinsTestSuite(),
+    transactionsTestSuite(),
   ],
   async onFinish() {
     await db.close();
