@@ -57,9 +57,7 @@ export class Swagger {
     description?: string,
     tags?: string[],
   ) {
-    if (!schema) {
-      return;
-    }
+    schema ??= {};
 
     const normalizedPath = path.replace(/:([^/]+)/g, "{$1}");
     if (!this.spec.paths) {
@@ -72,10 +70,16 @@ export class Swagger {
     const methodLower = method.toLowerCase();
     const operationObject: any = {
       summary: summary || `${method} ${path}`,
-      parameters: this.buildParameters(schema),
-      requestBody: this.buildRequestBody(schema),
       responses: this.buildResponses(schema),
     };
+    const parameters = this.buildParameters(schema, normalizedPath);
+    if (parameters) {
+      operationObject.parameters = parameters;
+    }
+    const requestBody = this.buildRequestBody(schema);
+    if (requestBody) {
+      operationObject.requestBody = requestBody;
+    }
 
     if (description) {
       operationObject.description = description;
@@ -145,7 +149,7 @@ export class Swagger {
     return {};
   }
 
-  private buildParameters(schema: any) {
+  private buildParameters(schema: any, path: string) {
     const parameters: any[] = [];
 
     const paramsSchema = this.extractJsonSchema(schema.params);
@@ -154,10 +158,16 @@ export class Swagger {
         parameters.push({
           name,
           in: "path",
-          required: paramsSchema.required?.includes(name) ?? true,
+          required: true,
           schema: propSchema,
         });
       });
+    }
+
+    for (const [, name] of path.matchAll(/\{([^}]+)\}/g)) {
+      if (!parameters.some((parameter) => parameter.in === "path" && parameter.name === name)) {
+        parameters.push({ name, in: "path", required: true, schema: { type: "string" } });
+      }
     }
 
     const querySchema = this.extractJsonSchema(schema.query);
