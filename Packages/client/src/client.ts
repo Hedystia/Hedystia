@@ -1,4 +1,4 @@
-import type { Hedystia, RouteDefinition } from "hedystia";
+import type { RouteDefinition } from "hedystia";
 import type { WebSocketCallback } from "./managers";
 import { SubscriptionManager, WebSocketManager } from "./managers";
 import type {
@@ -14,7 +14,9 @@ import { processResponse } from "./utils";
  * @param {string} baseUrl - Base URL for client
  * @returns {ClientTree<ExtractRoutesFromFramework<T>>} Client instance
  */
-export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
+export function createClient<
+  T extends { readonly allRoutes: RouteDefinition[] } | RouteDefinition[],
+>(
   baseUrl: string,
   clientOptions?: {
     credentials?: "omit" | "same-origin" | "include";
