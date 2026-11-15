@@ -9,6 +9,7 @@ export {
   cleanNode,
   cleanupSources,
   createRoot,
+  getOwner,
   Listener,
   memo,
   Owner,
