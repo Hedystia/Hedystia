@@ -2780,7 +2780,10 @@ export class Hedystia<
         let path = route.path;
         if (data.params) {
           for (const [key, val] of Object.entries(data.params)) {
-            path = path.replace(`:${key}`, String(val));
+            path = path
+              .split("/")
+              .map((segment) => (segment === `:${key}` ? encodeURIComponent(String(val)) : segment))
+              .join("/");
           }
         }
 
@@ -2796,7 +2799,7 @@ export class Hedystia<
         const init: RequestInit = {
           method: route.method,
           headers: {
-            ...(data.body ? { "Content-Type": "application/json" } : {}),
+            ...(data.body !== undefined ? { "Content-Type": "application/json" } : {}),
             ...data.headers,
           },
         };
