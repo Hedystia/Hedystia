@@ -26,6 +26,7 @@ export type { ViewApp } from "./render";
 export {
   ErrorBoundary,
   For,
+  hydrate,
   Index,
   Match,
   mount,
@@ -39,7 +40,7 @@ export {
 export { forceFlush, nextFrame, tick } from "./scheduler";
 export type { Computed as ComputedSignal, Owner, ReadonlySignal, Signal } from "./signal";
 // Signal system
-export { batch, createRoot, memo, peek, set, sig, untrack, update, val } from "./signal";
+export { batch, createRoot, getOwner, memo, peek, set, sig, untrack, update, val } from "./signal";
 // Store
 export { patch, reset, snap, store } from "./store";
 // Style
