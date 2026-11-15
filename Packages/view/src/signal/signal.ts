@@ -18,6 +18,8 @@ import type {
 import { equalFn } from "../utils";
 
 /** @internal */
+const disposedNodes = new WeakSet<object>();
+
 export let Owner: OwnerType | null = null;
 
 /** @internal */
@@ -167,6 +169,9 @@ export function cleanupSources(computation: Computation<any>): void {
 
 /** @internal - Run a computation with proper Listener tracking */
 export function runComputation<T>(computation: Computation<T>): T | undefined {
+  if (disposedNodes.has(computation)) {
+    return computation._value;
+  }
   const prevListener = Listener;
   const prevOwner = Owner;
 
@@ -308,7 +313,7 @@ function flushUpdates(): void {
   for (let i = 0; i < updates.length; i++) {
     const computation = updates[i]!;
 
-    if (computation._user && computation._state === 1) {
+    if (computation._user && computation._state === 1 && !disposedNodes.has(computation)) {
       runComputation(computation);
     }
     // Non-user computations (memos) stay stale for lazy re-evaluation.
@@ -490,46 +495,61 @@ export function batch(fn: () => void): void {
 /**
  * Create a reactive root context
  */
-export function createRoot<T>(fn: (dispose: () => void) => T): T {
+export function createRoot<T>(fn: (dispose: () => void) => T, detachedOwner?: OwnerType | null): T {
   const prevOwner = Owner;
   const prevListener = Listener;
-  const root: OwnerType = {
-    _owned: null,
-    _cleanups: null,
-    _owner: prevOwner,
-    _context: null,
+  const parent = detachedOwner === undefined ? prevOwner : detachedOwner;
+  const root: OwnerType = { _owned: null, _cleanups: null, _owner: parent, _context: null };
+  if (parent) {
+    if (parent._owned === null) {
+      parent._owned = [];
+    }
+    parent._owned.push(root);
+  }
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    if (parent?._owned) {
+      const index = parent._owned.indexOf(root);
+      if (index !== -1) {
+        parent._owned.splice(index, 1);
+      }
+    }
+    cleanRoot(root);
   };
   Owner = root;
   Listener = null;
-
-  // Register with parent owner
-  adopt(root);
-
   try {
-    return fn(() => cleanRoot(root));
+    return fn(dispose);
+  } catch (error) {
+    dispose();
+    throw error;
   } finally {
     Owner = prevOwner;
     Listener = prevListener;
   }
 }
 
+/** Capture a stable reactive owner for explicitly owned roots and context inheritance. */
+export function getOwner(): OwnerType | null {
+  return Owner;
+}
+
 /** @internal */
 function cleanRoot(root: OwnerType): void {
-  if (root._cleanups !== null) {
-    const cleanups = root._cleanups;
-    root._cleanups = null;
-    // Run cleanups in reverse order (LIFO)
-    for (let i = cleanups.length - 1; i >= 0; i--) {
-      cleanups[i]!();
-    }
+  disposeNode(root);
+}
+
+/** Release an owned subtree permanently, including computations already queued to run. */
+function disposeNode(node: Computation<any> | OwnerType): void {
+  if (disposedNodes.has(node)) {
+    return;
   }
-  if (root._owned !== null) {
-    const owned = root._owned;
-    root._owned = null;
-    for (let i = 0; i < owned.length; i++) {
-      cleanNode(owned[i]!);
-    }
-  }
+  disposedNodes.add(node);
+  cleanNode(node);
 }
 
 /**
@@ -550,19 +570,29 @@ export function cleanNode(node: Computation<any> | OwnerType): void {
   if ("_sources" in node) {
     cleanupSources(node as Computation<any>);
   }
-  if ("_cleanups" in node && node._cleanups !== null) {
-    const cleanups = node._cleanups;
-    node._cleanups = null;
-    // Run cleanups in reverse order (LIFO)
-    for (let i = cleanups.length - 1; i >= 0; i--) {
-      cleanups[i]!();
+  const errors: unknown[] = [];
+  const cleanups = node._cleanups;
+  node._cleanups = null;
+  for (let index = (cleanups?.length ?? 0) - 1; index >= 0; index--) {
+    try {
+      cleanups![index]!();
+    } catch (error) {
+      errors.push(error);
     }
   }
-  if ("_owned" in node && node._owned !== null) {
-    const owned = node._owned;
-    node._owned = null;
-    for (let i = 0; i < owned.length; i++) {
-      cleanNode(owned[i]!);
+  const owned = node._owned;
+  node._owned = null;
+  for (const child of owned ?? []) {
+    try {
+      disposeNode(child);
+    } catch (error) {
+      errors.push(error);
     }
+  }
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, "Reactive cleanup failed");
   }
 }
