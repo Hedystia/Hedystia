@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/types",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
+  "description": "Generate portable TypeScript route declarations in memory or on disk for typed API consumers.",
   "homepage": "https://docs.hedystia.com/plugins/types",
   "dependencies": {
     "@hedystia/validations": "workspace:*"
@@ -13,14 +13,11 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "framework",
     "typescript",
-    "api",
+    "code-generation",
+    "api-client",
     "type-safe",
-    "bun",
-    "server",
-    "backend",
-    "web"
+    "schema"
   ],
   "license": "MIT",
   "scripts": {
@@ -32,9 +29,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
