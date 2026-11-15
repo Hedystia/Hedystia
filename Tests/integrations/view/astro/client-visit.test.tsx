@@ -49,12 +49,11 @@ describe("Astro client island visit", () => {
     expect(island.innerHTML).toBe("");
   });
 
-  it("skips hydration and slot scanning when the island is client-only", () => {
+  it("activates client-only islands without requiring server content", () => {
     document.body.innerHTML =
       '<astro-island id="client-only"><astro-slot name="header"><h3>Nombre</h3></astro-slot></astro-island>';
 
     const island = document.querySelector("#client-only") as HTMLElement;
-    const before = island.innerHTML;
 
     astroClient(island)(
       () => jsx("div", { children: "compacto" }),
@@ -63,7 +62,7 @@ describe("Astro client island visit", () => {
       { client: "only" },
     );
 
-    expect(island.innerHTML).toBe(before);
+    expect(island.innerHTML).toBe("<div>compacto</div>");
   });
 
   it("excludes nested islands from slot collection", () => {
