@@ -1,5 +1,13 @@
 # @hedystia/astro
 
+## Small reactive islands in Astro
+
+Render View components on the server and mount reactive islands using Astro client directives, with disposal on navigation. Components that intentionally return `null` or an empty string are accepted. Named-slot attributes are escaped. The first client activation hydrates compatible server DOM in place, preserving focus, selection, form edits and Astro slots. Client-only components and changed-prop replacements mount fresh content; persisted islands with unchanged props keep their existing owner.
+
+```sh
+npm install @hedystia/astro
+```
+
 Astro integration for [@hedystia/view](https://www.npmjs.com/package/@hedystia/view) — use reactive View components within Astro.
 
 ## Installation
