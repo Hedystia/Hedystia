@@ -1,5 +1,13 @@
 # @hedystia/better-auth
 
+## Auth storage with visible failures
+
+Connect Better Auth to Hedystia DB and generate schemas and migrations. Pagination respects `limit: 0` and rejects negative, fractional or unsafe page bounds. Query failures propagate to the caller instead of looking like an empty account list, so applications can report outages accurately.
+
+```sh
+npm install @hedystia/better-auth
+```
+
 @hedystia/db adapter for [Better Auth](https://www.better-auth.com/) — use @hedystia/db as your auth database layer.
 
 ## Installation
