@@ -3,6 +3,7 @@ import type { RendererContext } from "./types";
 type Context = {
   id: string;
   c: number;
+  rendered: WeakMap<Function, { props: unknown; children: unknown; mode: boolean; html: string }>;
 };
 
 const contexts = new WeakMap<RendererContext["result"], Context>();
@@ -13,6 +14,7 @@ export function getContext(result: RendererContext["result"]): Context {
   }
   const ctx: Context = {
     c: 0,
+    rendered: new WeakMap(),
     get id() {
       return `v${this.c.toString()}`;
     },
