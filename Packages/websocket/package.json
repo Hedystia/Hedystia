@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/ws",
   "version": "2.4.7",
-  "description": "Universal WebSocket primitives for Hedystia (Bun, Node.js, Deno)",
+  "description": "Native-runtime WebSocket server and client with topic pub/sub, binary controls and queue visibility.",
   "homepage": "https://docs.hedystia.com/plugins/websocket",
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -10,14 +10,13 @@
   "private": false,
   "keywords": [
     "hedystia",
+    "typescript",
     "websocket",
-    "ws",
+    "pubsub",
+    "realtime",
     "bun",
     "nodejs",
-    "node",
-    "deno",
-    "realtime",
-    "framework"
+    "deno"
   ],
   "license": "MIT",
   "scripts": {
@@ -29,9 +28,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
