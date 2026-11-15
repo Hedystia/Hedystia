@@ -25,6 +25,8 @@
     "./Packages/view",
     "./Packages/integrations/view/astro",
     "./Packages/integrations/database/better-auth",
+    "./Packages/query",
+    "./Packages/router",
     "./Tests"
   ],
   "scripts": {
@@ -40,9 +42,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "packageManager": "pnpm@12.14.0"
 }
