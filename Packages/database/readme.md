@@ -1,5 +1,13 @@
 # @hedystia/db
 
+## One schema, explicit storage choices
+
+Use schema-first repositories with SQL, file or S3 storage and opt-in query caching. The memory cache enforces positive integer capacity, expires at the TTL boundary, and updates existing entries without evicting unrelated data. Non-positive or non-finite TTLs disable retention for that entry. Driver transaction guarantees differ; choose a driver for its documented capabilities.
+
+```sh
+npm install @hedystia/db
+```
+
 Type-safe database primitives for SQLite, MySQL, PostgreSQL, JSON files, and
 S3-backed storage.
 
