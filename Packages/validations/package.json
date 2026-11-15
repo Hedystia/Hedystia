@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/validations",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
+  "description": "Composable TypeScript validation with Standard Schema interoperability, async checks and inferred object helpers.",
   "homepage": "https://docs.hedystia.com/validations/start",
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -13,14 +13,12 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "framework",
     "typescript",
-    "api",
-    "type-safe",
-    "bun",
-    "server",
-    "backend",
-    "web"
+    "validation",
+    "schema",
+    "standard-schema",
+    "json-schema",
+    "type-inference"
   ],
   "license": "MIT",
   "scripts": {
@@ -32,9 +30,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
