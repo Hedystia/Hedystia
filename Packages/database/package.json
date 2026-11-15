@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/db",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript ORM for building type-safe database layers at lightspeed",
+  "description": "Schema-first TypeScript ORM with SQL, file and S3 drivers, migrations and bounded query caching.",
   "homepage": "https://docs.hedystia.com",
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -45,13 +45,14 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "database",
-    "orm",
     "typescript",
-    "type-safe",
-    "bun",
+    "orm",
+    "sqlite",
+    "postgresql",
     "mysql",
-    "sqlite"
+    "migrations",
+    "s3",
+    "cache"
   ],
   "license": "MIT",
   "scripts": {
@@ -63,9 +64,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
