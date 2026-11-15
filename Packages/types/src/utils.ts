@@ -56,7 +56,9 @@ export function schemaToTypeString(schema: any): string {
 
   if (schema instanceof LiteralSchema) {
     const val = (schema as any).value;
-    return typeof val === "string" ? `'${val}'` : String(val);
+    return typeof val === "string"
+      ? `'${JSON.stringify(val).slice(1, -1).replace(/'/g, "\\'")}'`
+      : String(val);
   }
 
   if (schema instanceof InstanceOfSchema) {
@@ -73,7 +75,7 @@ export function schemaToTypeString(schema: any): string {
     const validIdentifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
     const properties = Object.entries(definition)
       .map(([key, value]) => {
-        const finalKey = validIdentifierRegex.test(key) ? key : `"${key}"`;
+        const finalKey = validIdentifierRegex.test(key) ? key : JSON.stringify(key);
         const isOptional = value instanceof OptionalSchema;
         const optionalMarker = isOptional ? "?" : "";
 
