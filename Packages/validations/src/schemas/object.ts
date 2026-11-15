@@ -1,6 +1,12 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { BaseSchema, OptionalSchema, validatePrimitive } from "../core/base";
-import type { CombinedStandardProps, SchemaDefinition, SchemaPrimitive } from "../core/types";
+import type {
+  CombinedStandardProps,
+  InferObject,
+  SchemaDefinition,
+  SchemaPrimitive,
+  Simplify,
+} from "../core/types";
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof value === "object" && value !== null && "then" in value;
@@ -74,7 +80,9 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @param {SchemaDefinition} extension Extra fields to add.
    * @returns {ObjectSchemaType<any>} New extended object schema.
    */
-  extend(extension: SchemaDefinition): ObjectSchemaType<any> {
+  extend<S extends SchemaDefinition>(
+    extension: S,
+  ): ObjectSchemaType<Simplify<Omit<T, keyof S> & InferObject<S>>> {
     return this._withFlags(new ObjectSchemaType<any>({ ...this.definition, ...extension }));
   }
 
@@ -83,7 +91,9 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @param {ObjectSchemaType<any>} other Schema to merge in.
    * @returns {ObjectSchemaType<any>} Merged object schema.
    */
-  merge(other: ObjectSchemaType<any>): ObjectSchemaType<any> {
+  merge<S extends Record<string, unknown>>(
+    other: ObjectSchemaType<S>,
+  ): ObjectSchemaType<Simplify<Omit<T, keyof S> & S>> {
     return this._withFlags(new ObjectSchemaType<any>({ ...this.definition, ...other.definition }));
   }
 
@@ -92,7 +102,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @param {readonly (keyof T & string)[]} keys Field names to keep.
    * @returns {ObjectSchemaType<any>} Picked object schema.
    */
-  pick(keys: readonly (keyof T & string)[]): ObjectSchemaType<any> {
+  pick<K extends keyof T & string>(keys: readonly K[]): ObjectSchemaType<Pick<T, K>> {
     const next: SchemaDefinition = {};
     for (const k of keys) {
       if (k in this.definition) {
@@ -107,7 +117,7 @@ export class ObjectSchemaType<T extends Record<string, unknown>> extends BaseSch
    * @param {readonly (keyof T & string)[]} keys Field names to remove.
    * @returns {ObjectSchemaType<any>} Object schema without those fields.
    */
-  omit(keys: readonly (keyof T & string)[]): ObjectSchemaType<any> {
+  omit<K extends keyof T & string>(keys: readonly K[]): ObjectSchemaType<Omit<T, K>> {
     const next: SchemaDefinition = { ...this.definition };
     for (const k of keys) {
       delete next[k];
