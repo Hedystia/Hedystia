@@ -86,17 +86,21 @@ export type MergeMethodObjects<T> = {
   [K in keyof T as T[K] extends never ? never : K]: T[K];
 };
 
+type RouteField<R, K extends keyof RouteDefinition, Fallback = undefined> = K extends keyof R
+  ? R[K]
+  : Fallback;
+
 export type RouteTuple<R extends RouteDefinition> = [
   R["method"],
   R["path"],
-  R["params"],
-  R["query"],
-  R["body"],
-  R["response"],
-  R["headers"],
-  R["data"],
-  R["error"],
-  R["message"],
+  RouteField<R, "params">,
+  RouteField<R, "query">,
+  RouteField<R, "body">,
+  RouteField<R, "response", unknown>,
+  RouteField<R, "headers">,
+  RouteField<R, "data", unknown>,
+  RouteField<R, "error", unknown>,
+  RouteField<R, "message", unknown>,
 ];
 
 export type RouteToFunction<RouteInfo> = RouteInfo extends [
@@ -154,13 +158,21 @@ export type RouteToWebSocket<RouteInfo> = RouteInfo extends [infer M, any, ...an
 
 export type RouteMetadata<R extends RouteDefinition> = {
   path: R["path"];
-  params: R["params"];
   methods: MergeMethodObjects<
     {
       [M in R["method"] as M extends "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
         ? Lowercase<M>
         : never]: RouteToFunction<
-        [M, R["path"], R["params"], R["query"], R["body"], R["response"], R["headers"], R["error"]]
+        [
+          M,
+          R["path"],
+          RouteField<R, "params">,
+          RouteField<R, "query">,
+          RouteField<R, "body">,
+          RouteField<R, "response", unknown>,
+          RouteField<R, "headers">,
+          RouteField<R, "error", unknown>,
+        ]
       >;
     } & {
       [M in R["method"] as M extends "SUB" ? "subscribe" : never]: RouteToSubscription<
@@ -170,7 +182,7 @@ export type RouteMetadata<R extends RouteDefinition> = {
       [M in R["method"] as M extends "WS" ? "ws" : never]: RouteToWebSocket<RouteTuple<R>>;
     }
   >;
-};
+} & (R extends { params: infer P } ? { params: P } : {});
 
 export type SegmentsToNode<
   Segments extends string[],
@@ -191,7 +203,9 @@ export type TreeToClient<Node> = (Node extends { __meta: { methods: infer M } } 
       : K]: K extends `:${infer Param}`
     ? (
         value: Node[K] extends { __meta: { params: infer P } }
-          ? P[Param & keyof P]
+          ? Param extends keyof NonNullable<P>
+            ? NonNullable<P>[Param]
+            : string | number
           : string | number,
       ) => TreeToClient<Node[K]>
     : TreeToClient<Node[K]>;
