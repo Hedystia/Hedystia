@@ -28,7 +28,7 @@
 | [`@hedystia/query`](./Packages/query) | [![npm](https://img.shields.io/npm/v/@hedystia/query.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/query) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Fquery?style=flat-square)](https://www.npmjs.com/package/@hedystia/query) | Reactive query caching, shared requests and mutation invalidation using View primitives |
 | [`@hedystia/adapter`](./Packages/adapter) | [![npm](https://img.shields.io/npm/v/@hedystia/adapter.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/adapter) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Fadapter?style=flat-square)](https://www.npmjs.com/package/@hedystia/adapter) | Multi-runtime adapters — Cloudflare Workers, Node.js, Deno, Lambda, Vercel, Fastly Compute |
 | [`@hedystia/swagger`](./Packages/swagger) | [![npm](https://img.shields.io/npm/v/@hedystia/swagger.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/swagger) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Fswagger?style=flat-square)](https://www.npmjs.com/package/@hedystia/swagger) | OpenAPI/Swagger documentation auto-generated from your routes |
-| [`@hedystia/types`](./Packages/types) | [![npm](https://img.shields.io/npm/v/@hedystia/types.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/types) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Ftypes?style=flat-square)](https://www.npmjs.com/package/@hedystia/types) | Route type generation utility for end-to-end type safety |
+| [`@hedystia/types`](./Packages/types) | [![npm](https://img.shields.io/npm/v/@hedystia/types.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/types) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Ftypes?style=flat-square)](https://www.npmjs.com/package/@hedystia/types) | Compact route type generation for end-to-end type safety, without absent-schema placeholders |
 | [`@hedystia/ws`](./Packages/websocket) | [![npm](https://img.shields.io/npm/v/@hedystia/ws.svg?style=flat-square)](https://www.npmjs.com/package/@hedystia/ws) | [![Monthly downloads](https://img.shields.io/npm/dm/@hedystia%2Fws?style=flat-square)](https://www.npmjs.com/package/@hedystia/ws) | Universal WebSocket primitives — server, client, runtime detection |
 
 ### Integrations
@@ -53,7 +53,7 @@ Monthly download badges use public npm statistics through Shields.io; they requi
 | [`@hedystia/view`](./Packages/view) | Static HTML with explicit reactive islands and race-safe resources. |
 | [`@hedystia/adapter`](./Packages/adapter) | Keep uploads and streams intact on Node. |
 | [`@hedystia/swagger`](./Packages/swagger) | Documentation from the route contract. |
-| [`@hedystia/types`](./Packages/types) | Generate route contracts without filesystem writes. |
+| [`@hedystia/types`](./Packages/types) | Generate compact route contracts without unused schema fields or filesystem writes. |
 | [`@hedystia/ws`](./Packages/websocket) | Native sockets with binary and queue controls. |
 | [`@hedystia/astro`](./Packages/integrations/view/astro) | Small reactive islands in Astro. |
 | [`@hedystia/better-auth`](./Packages/integrations/database/better-auth) | Auth storage with visible failures. |
