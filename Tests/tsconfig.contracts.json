@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [
+    "validations/object-inference.test.ts",
+    "client/request-control.test.ts",
+    "query/query.test.ts",
+    "view/action-concurrency.test.ts",
+    "view/hydration.test.ts",
+    "view/islands.test.ts",
+    "router/types.test.ts",
+    "router/core.test.ts"
+  ]
+}
