@@ -8,4 +8,5 @@ export interface RouteInfo {
   response?: unknown;
   data?: unknown;
   error?: unknown;
+  message?: unknown;
 }
