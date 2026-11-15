@@ -30,16 +30,18 @@ export type SchemaOutput<S extends ValidationSchema | undefined, Fallback> = [S]
   ? InferOutput<S>
   : Fallback;
 
-export type MergeSchemaOutput<RouteSchema, GlobalSchema, Fallback> = [GlobalSchema] extends [
+type MergeGlobalOutput<Value, GlobalSchema> = [GlobalSchema] extends [ValidationSchema]
+  ? unknown extends Value
+    ? InferOutput<GlobalSchema>
+    : Value & InferOutput<GlobalSchema>
+  : Value;
+
+export type MergeSchemaOutput<RouteSchema, GlobalSchema, Fallback> = [RouteSchema] extends [
   ValidationSchema,
 ]
-  ? [RouteSchema] extends [ValidationSchema]
-    ? InferOutput<RouteSchema> & InferOutput<GlobalSchema>
-    : Fallback extends object
-      ? InferOutput<GlobalSchema> & Fallback
-      : InferOutput<GlobalSchema>
-  : [RouteSchema] extends [ValidationSchema]
-    ? InferOutput<RouteSchema>
+  ? MergeGlobalOutput<InferOutput<RouteSchema>, GlobalSchema>
+  : [GlobalSchema] extends [ValidationSchema]
+    ? InferOutput<GlobalSchema>
     : Fallback;
 
 export type GlobalSchemaOutput<G extends ValidationSchema | undefined, Fallback = unknown> = [
@@ -58,15 +60,13 @@ export type PipeGlobalRoutes<
   [K in keyof Routes]: Routes[K] extends RouteDefinition
     ? Omit<Routes[K], "params" | "query" | "headers" | "body"> &
         (Routes[K] extends { params: infer P }
-          ? { params: P & GlobalSchemaOutput<GlobalParams, {}> }
+          ? { params: MergeGlobalOutput<P, GlobalParams> }
           : {}) &
-        (Routes[K] extends { query: infer Q }
-          ? { query: Q & GlobalSchemaOutput<GlobalQuery, {}> }
-          : {}) &
+        (Routes[K] extends { query: infer Q } ? { query: MergeGlobalOutput<Q, GlobalQuery> } : {}) &
         (Routes[K] extends { headers: infer H }
-          ? { headers: H & GlobalSchemaOutput<GlobalHeaders> }
+          ? { headers: MergeGlobalOutput<H, GlobalHeaders> }
           : {}) &
-        (Routes[K] extends { body: infer B } ? { body: B & GlobalSchemaOutput<GlobalBody> } : {})
+        (Routes[K] extends { body: infer B } ? { body: MergeGlobalOutput<B, GlobalBody> } : {})
     : never;
 };
 
@@ -190,18 +190,7 @@ export type CorsOptions = {
 
 export type PrefixRoutes<Prefix extends string, T extends RouteDefinition[]> = {
   [K in keyof T]: T[K] extends RouteDefinition
-    ? {
-        method: T[K]["method"];
-        path: `${Prefix}${T[K]["path"]}`;
-        params: T[K]["params"];
-        query: T[K]["query"];
-        headers: T[K]["headers"];
-        body: T[K] extends { body: infer B } ? B : undefined;
-        response: T[K] extends { response: infer R } ? R : undefined;
-        data: T[K] extends { data: infer D } ? D : undefined;
-        error: T[K] extends { error: infer E } ? E : undefined;
-        security: T[K] extends { security: infer S } ? S : undefined;
-      }
+    ? Omit<T[K], "path"> & { path: `${Prefix}${T[K]["path"]}` }
     : never;
 };
 
