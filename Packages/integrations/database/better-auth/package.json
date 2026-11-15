@@ -1,16 +1,17 @@
 {
   "name": "@hedystia/better-auth",
   "version": "2.4.7",
-  "description": "@hedystia/db adapter for Better Auth",
+  "description": "Better Auth adapter for Hedystia DB with schema generation, transactions and validated pagination.",
   "homepage": "https://docs.hedystia.com",
   "private": false,
   "keywords": [
     "hedystia",
+    "typescript",
     "better-auth",
+    "authentication",
     "database",
     "orm",
-    "adapter",
-    "auth"
+    "adapter"
   ],
   "license": "MIT",
   "type": "commonjs",
@@ -41,8 +42,8 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   }
 }
