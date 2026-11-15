@@ -172,6 +172,21 @@ export class Swagger {
       });
     }
 
+    const headersSchema = this.extractJsonSchema(schema.headers);
+    if (headersSchema.properties) {
+      for (const [name, propSchema] of Object.entries(headersSchema.properties)) {
+        if (["accept", "content-type", "authorization"].includes(name.toLowerCase())) {
+          continue;
+        }
+        parameters.push({
+          name,
+          in: "header",
+          required: headersSchema.required?.includes(name) ?? false,
+          schema: propSchema,
+        });
+      }
+    }
+
     return parameters.length > 0 ? parameters : undefined;
   }
 
