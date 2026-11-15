@@ -6,8 +6,10 @@
 
 import { effect } from "../jsx/element";
 import { tick } from "../scheduler";
+import { isRawHTML } from "../server/trusted";
 import { onCleanup as signalOnCleanup, val } from "../signal";
 import type { Accessor } from "../types";
+import { adoptedNode, isHydrating, onHydrate, stageNode } from "./hydration";
 
 /**
  * Check if running in browser
@@ -48,6 +50,7 @@ function insertNodesAfter(marker: Comment, nodes: Node[]): void {
   } else {
     // If no parent yet, we wait a bit, but also we can check if it's attached later.
     pendingInsertions.set(marker, doInsert);
+    signalOnCleanup(() => pendingInsertions.delete(marker));
     // Use queueMicrotask as a fallback
     queueMicrotask(() => {
       if (pendingInsertions.has(marker) && marker.parentNode) {
@@ -74,6 +77,11 @@ function removeNodes(nodes: Node[]): void {
 
 /** @internal - Resolve any content value into an array of DOM nodes */
 export function resolveNodes(content: any): Node[] {
+  if (isRawHTML(content)) {
+    const template = document.createElement("template");
+    template.innerHTML = content.html;
+    return Array.from(template.content.childNodes);
+  }
   if (content == null || content === false) {
     return [];
   }
@@ -97,7 +105,7 @@ export function resolveNodes(content: any): Node[] {
     content instanceof Comment ||
     (typeof SVGElement !== "undefined" && content instanceof SVGElement)
   ) {
-    return [content];
+    return [stageNode(adoptedNode(content))];
   }
   if (typeof content === "string" || typeof content === "number") {
     return [document.createTextNode(String(content))];
@@ -121,8 +129,12 @@ export function Show<T>(props: { when: T | Accessor<T>; fallback?: any; children
     return "";
   }
 
-  const container = document.createComment("show");
-  const currentNodes: Node[] = [];
+  let container = document.createComment("show");
+  let currentNodes: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    currentNodes = currentNodes.map(resolve);
+  });
 
   effect(() => {
     const cond = val(props.when);
@@ -165,8 +177,12 @@ export function For<T>(props: {
     });
   }
 
-  const container = document.createComment("for");
+  let container = document.createComment("for");
   let currentNodes: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    currentNodes = currentNodes.map(resolve);
+  });
 
   effect(() => {
     const items = val(props.each);
@@ -211,8 +227,12 @@ export function Index<T>(props: {
     });
   }
 
-  const container = document.createComment("index");
+  let container = document.createComment("index");
   let currentNodes: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    currentNodes = currentNodes.map(resolve);
+  });
 
   effect(() => {
     const items = val(props.each);
@@ -258,8 +278,12 @@ export function Switch(props: { fallback?: any; children: any }): any {
     return props.fallback || "";
   }
 
-  const container = document.createComment("switch");
+  let container = document.createComment("switch");
   let currentNodes: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    currentNodes = currentNodes.map(resolve);
+  });
 
   effect(() => {
     const children = props.children;
@@ -326,17 +350,28 @@ export function Portal(props: { mount?: HTMLElement; children: any }): any {
     return props.children;
   }
 
-  const container = document.createComment("portal");
+  let container = document.createComment("portal");
   const mountPoint = props.mount || document.body;
   const rendered: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    rendered.splice(0, rendered.length, ...rendered.map(resolve));
+    for (const node of rendered) {
+      mountPoint.appendChild(node);
+    }
+  });
 
   const doRender = () => {
     removeNodes(rendered);
     const nodes = resolveNodes(props.children);
     rendered.length = 0;
     rendered.push(...nodes);
-    for (const node of rendered) {
-      mountPoint.appendChild(node);
+    if (isHydrating()) {
+      insertNodesAfter(container, rendered);
+    } else {
+      for (const node of rendered) {
+        mountPoint.appendChild(node);
+      }
     }
   };
 
@@ -345,6 +380,7 @@ export function Portal(props: { mount?: HTMLElement; children: any }): any {
       doRender();
     } else {
       pendingInsertions.set(container, doRender);
+      signalOnCleanup(() => pendingInsertions.delete(container));
     }
   });
 
@@ -366,11 +402,16 @@ export function Suspense(props: { fallback?: any; children: any }): any {
     return props.children;
   }
 
-  const container = document.createComment("suspense");
+  let container = document.createComment("suspense");
   let renderedNodes: Node[] = [];
   let fallbackNodes: Node[] = [];
+  onHydrate((resolve) => {
+    container = resolve(container);
+    renderedNodes = renderedNodes.map(resolve);
+    fallbackNodes = fallbackNodes.map(resolve);
+  });
 
-  tick(() => {
+  initialRender(() => {
     try {
       if (fallbackNodes.length > 0) {
         removeNodes(fallbackNodes);
@@ -418,9 +459,13 @@ export function ErrorBoundary(props: {
     }
   }
 
-  const container = document.createComment("error-boundary");
+  let container = document.createComment("error-boundary");
   let renderedNodes: Node[] = [];
   let error: Error | null = null;
+  onHydrate((resolve) => {
+    container = resolve(container);
+    renderedNodes = renderedNodes.map(resolve);
+  });
 
   const reset = () => {
     error = null;
@@ -445,7 +490,7 @@ export function ErrorBoundary(props: {
     });
   };
 
-  tick(() => {
+  initialRender(() => {
     try {
       renderedNodes = resolveNodes(props.children);
       if (renderedNodes.length > 0) {
@@ -462,4 +507,13 @@ export function ErrorBoundary(props: {
   });
 
   return container;
+}
+
+/** Prepare initial async-flow DOM before adoption while retaining scheduled ordinary mounts. */
+function initialRender(fn: () => void): void {
+  if (isHydrating()) {
+    fn();
+  } else {
+    tick(fn);
+  }
 }
