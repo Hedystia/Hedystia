@@ -568,18 +568,21 @@ export const hedystiaAdapter = (db: any, options?: HedystiaAdapterOptions) => {
             query += ` ORDER BY \`${sortBy.field}\` ${sortBy.direction === "desc" ? "DESC" : "ASC"}`;
           }
 
-          query += ` LIMIT ${limit || 100}`;
+          const pageLimit = limit ?? 100;
+          if (
+            !Number.isSafeInteger(pageLimit) ||
+            pageLimit < 0 ||
+            (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0))
+          ) {
+            throw new BetterAuthError("limit and offset must be non-negative safe integers");
+          }
+          query += ` LIMIT ${pageLimit}`;
 
           if (offset) {
             query += ` OFFSET ${offset}`;
           }
 
-          let rows: any[];
-          try {
-            rows = await driver.query(query, params);
-          } catch {
-            return [];
-          }
+          let rows: any[] = await driver.query(query, params);
 
           if (select?.length) {
             const defaultModelName = getDefaultModelName(model);
