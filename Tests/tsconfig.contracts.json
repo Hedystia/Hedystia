@@ -3,6 +3,7 @@
   "include": [
     "validations/object-inference.test.ts",
     "client/request-control.test.ts",
+    "types/compact-generation.test.ts",
     "query/query.test.ts",
     "view/action-concurrency.test.ts",
     "view/hydration.test.ts",
