@@ -4,7 +4,9 @@
  * Provides onMount, onCleanup, and onReady hooks for component lifecycle.
  */
 
-import { createRoot, onCleanup as signalOnCleanup } from "../signal";
+import { afterHydration } from "../render/hydration";
+import { isServerRendering } from "../server/state";
+import { createRoot, getOwner, onCleanup as signalOnCleanup } from "../signal";
 
 /**
  * Register a callback to run when the component mounts
@@ -16,11 +18,24 @@ import { createRoot, onCleanup as signalOnCleanup } from "../signal";
  * });
  */
 export function onMount(fn: () => undefined | (() => void)): void {
-  createRoot(() => {
-    const result = fn();
-    if (typeof result === "function") {
-      signalOnCleanup(result);
+  if (isServerRendering() || typeof document === "undefined") {
+    return;
+  }
+  const owner = getOwner();
+  let cancelled = false;
+  signalOnCleanup(() => {
+    cancelled = true;
+  });
+  afterHydration(() => {
+    if (cancelled) {
+      return;
     }
+    createRoot(() => {
+      const result = fn();
+      if (typeof result === "function") {
+        signalOnCleanup(result);
+      }
+    }, owner);
   });
 }
 
@@ -45,5 +60,16 @@ export function onCleanup(fn: () => void): void {
  * });
  */
 export function onReady(fn: () => void): void {
-  queueMicrotask(fn);
+  if (isServerRendering() || typeof document === "undefined") {
+    return;
+  }
+  let cancelled = false;
+  signalOnCleanup(() => {
+    cancelled = true;
+  });
+  queueMicrotask(() => {
+    if (!cancelled) {
+      fn();
+    }
+  });
 }
