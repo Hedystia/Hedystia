@@ -1,7 +1,7 @@
 {
   "name": "hedystia",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
+  "description": "Schema-first TypeScript HTTP server with typed routes, SSE, WebSockets and embedded route tests.",
   "homepage": "https://docs.hedystia.com",
   "dependencies": {
     "@hedystia/types": "workspace:*",
@@ -16,14 +16,14 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "framework",
     "typescript",
-    "api",
+    "http-server",
     "type-safe",
+    "validation",
+    "sse",
+    "websocket",
     "bun",
-    "server",
-    "backend",
-    "web"
+    "nodejs"
   ],
   "license": "MIT",
   "scripts": {
@@ -35,9 +35,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
