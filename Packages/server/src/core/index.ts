@@ -12,6 +12,7 @@ import type {
   MacroResolveFunction,
   MergeMacros,
   MergeSchemaOutput,
+  PipeGlobalRoutes,
   PrefixRoutes,
   PublishMethod,
   PublishOptions,
@@ -282,7 +283,7 @@ export default class Core<
         query: this.globals.query,
         body: this.globals.body,
       },
-    ) as Hedystia<[], Macros>;
+    );
     groupApp.prefix = "";
     groupApp.macros = { ...this.macros };
 
