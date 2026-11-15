@@ -1,0 +1,53 @@
+{
+  "name": "@hedystia/query",
+  "version": "2.4.7",
+  "description": "Reactive query caching, shared requests and mutation invalidation built on Hedystia View.",
+  "homepage": "https://docs.hedystia.com/client/query",
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "private": false,
+  "license": "MIT",
+  "scripts": {
+    "build": "tsdown --config-loader unrun",
+    "dev": "tsdown --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hedystia/Hedystia"
+  },
+  "author": {
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
+  },
+  "type": "commonjs",
+  "types": "./dist/index.d.cts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.cts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "keywords": [
+    "hedystia",
+    "typescript",
+    "query-cache",
+    "reactive",
+    "signals",
+    "mutations",
+    "fetch"
+  ],
+  "files": [
+    "dist",
+    "readme.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@hedystia/view": "workspace:*"
+  }
+}
