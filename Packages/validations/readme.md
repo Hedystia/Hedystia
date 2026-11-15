@@ -1,5 +1,13 @@
 # @hedystia/validations
 
+## Reuse schemas without losing field types
+
+`pick`, `omit`, `extend` and `merge` retain inferred field types and optional properties. Extensions and merges replace overlapping fields, while derived schemas preserve the original strict or passthrough behavior. The source schema stays unchanged.
+
+```sh
+npm install @hedystia/validations
+```
+
 Type-safe runtime validation for TypeScript APIs with Standard Schema compatibility.
 
 ## Install
