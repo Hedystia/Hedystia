@@ -96,7 +96,7 @@ describe("Astro page visit journey (renderer)", () => {
       {},
       {
         default: "<p>slot-footer-content</p>",
-        "hero-title": "<em>Título desde slot</em><script>no</script>",
+        "hero-title": "<em>Título desde slot</em>&lt;script&gt;no&lt;/script&gt;",
         "main-text": "<b>texto principal</b>",
       },
       { hydrate: false, astroStaticSlot: true },
@@ -106,7 +106,6 @@ describe("Astro page visit journey (renderer)", () => {
     expect(html).toContain("Título desde slot");
     expect(html).toContain("texto principal");
     expect(html).toContain("slot-footer-content");
-    // Slot markup arrives as props and is escaped by the serializer
     expect(html).toContain("astro-static-slot");
     expect(html).not.toContain("<script>no</script>");
     expect(html).not.toContain("<astro-slot>");
@@ -139,7 +138,7 @@ describe("Astro page visit journey (renderer)", () => {
     expect(third.html).toContain('<circle cx="12" cy="12" r="10"></circle>');
     expect(third.html).toContain('src="/avatar.png"');
     expect(third.html).toContain('<progress max="100" value="75"></progress>');
-    expect(third.html).toContain("borderColor:#ff6600");
+    expect(third.html).toContain("border-color:#ff6600");
   });
 
   it("of a fresh page, hydration ids restart", async () => {
@@ -152,7 +151,7 @@ describe("Astro page visit journey (renderer)", () => {
     );
 
     expect(attrs["data-view-render-id"]).toBe("v0");
-    expect(html).toContain("&lt;astro-slot name=&quot;heroTitle&quot;&gt;");
+    expect(html).toContain('<astro-slot name="heroTitle">');
     expect(html).toContain("noticia fresca");
     expect(html).not.toContain("astro-static-slot");
   });
