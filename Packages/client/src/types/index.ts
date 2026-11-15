@@ -47,6 +47,7 @@ export type OptionalPart<Key extends string, T> = T extends undefined | never
 
 export type RequestOptions<B, Q, H, M extends string> = {
   responseFormat?: ResponseFormat;
+  signal?: AbortSignal;
   credentials?: "omit" | "same-origin" | "include";
 } & (M extends "GET" ? {} : OptionalPart<"body", B>) &
   OptionalPart<"query", Q> &
