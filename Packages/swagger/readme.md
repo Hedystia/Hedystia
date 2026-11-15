@@ -1,5 +1,13 @@
 # @hedystia/swagger
 
+## Documentation from the route contract
+
+Generate request, response, path, query and custom-header parameters from route schemas. Required and optional headers stay distinct. OpenAPI reserves `Authorization`, `Accept` and `Content-Type`; authentication should be described through security schemes rather than header parameters.
+
+```sh
+npm install @hedystia/swagger
+```
+
 OpenAPI 3 documentation for Hedystia applications, including HTTP, WebSocket,
 and subscription routes.
 
