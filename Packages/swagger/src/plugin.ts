@@ -27,6 +27,7 @@ export function swagger(options: SwaggerOptions = {}) {
         {
           params: route.schema.params,
           query: route.schema.query,
+          headers: route.schema.headers,
           body: route.schema.body,
           response: route.schema.response,
         },
