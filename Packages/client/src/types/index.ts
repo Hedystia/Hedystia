@@ -1,4 +1,4 @@
-import type { Hedystia, RouteDefinition } from "hedystia";
+import type { RouteDefinition } from "hedystia";
 
 export type ResponseFormat =
   | "json"
@@ -217,5 +217,10 @@ export type ClientTree<R extends RouteDefinition> = TreeToClient<
 
 export type ExtractRoutes<T extends RouteDefinition[]> = T[number];
 
-export type ExtractRoutesFromFramework<T> =
-  T extends Hedystia<infer R> ? ExtractRoutes<R> : T extends RouteDefinition[] ? T[number] : never;
+export type ExtractRoutesFromFramework<T> = T extends {
+  readonly allRoutes: infer R extends RouteDefinition[];
+}
+  ? ExtractRoutes<R>
+  : T extends RouteDefinition[]
+    ? T[number]
+    : never;
