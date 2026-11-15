@@ -4,8 +4,12 @@
  * Provides type definitions for all HTML and SVG intrinsic elements.
  */
 
+import type { RawHTML } from "./server/trusted";
+
 export namespace JSX {
   export type Element =
+    | Element[]
+    | RawHTML
     | HTMLElement
     | SVGElement
     | DocumentFragment
