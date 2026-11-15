@@ -10,6 +10,8 @@ packages:
   - "./Packages/view"
   - "./Packages/integrations/view/astro"
   - "./Packages/integrations/database/better-auth"
+  - "./Packages/query"
+  - "./Packages/router"
   - "./Tests"
 
 allowBuilds:
