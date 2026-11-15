@@ -2,19 +2,32 @@ import { writeFile } from "fs/promises";
 import type { RouteInfo } from "./types";
 import { schemaToTypeString } from "./utils";
 
+const schemaSections = [
+  "params",
+  "query",
+  "body",
+  "headers",
+  "response",
+  "data",
+  "error",
+  "message",
+] as const;
+
 /** Generate a portable declaration without writing to disk. */
 export function generateTypesContent(routes: readonly RouteInfo[]): string {
   const typeDefinitions = routes
     .map((route) => {
-      const responseType = schemaToTypeString(route.response);
-      const paramsType = schemaToTypeString(route.params);
-      const queryType = schemaToTypeString(route.query);
-      const bodyType = schemaToTypeString(route.body);
-      const headersType = schemaToTypeString(route.headers);
-      const dataType = schemaToTypeString(route.data);
-      const errorType = schemaToTypeString(route.error);
-      const messageType = schemaToTypeString(route.message);
-      return `{method:${JSON.stringify(route.method)};path:${JSON.stringify(route.path)};params:${paramsType};query:${queryType};body:${bodyType};headers:${headersType};response:${responseType};data:${dataType};error:${errorType};message:${messageType}}`;
+      const fields = [
+        `method:${JSON.stringify(route.method)}`,
+        `path:${JSON.stringify(route.path)}`,
+      ];
+      for (const section of schemaSections) {
+        const schema = route[section];
+        if (schema !== undefined && schema !== null) {
+          fields.push(`${section}:${schemaToTypeString(schema)}`);
+        }
+      }
+      return `{${fields.join(";")}}`;
     })
     .join(",");
 
