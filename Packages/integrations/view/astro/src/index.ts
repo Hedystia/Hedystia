@@ -29,7 +29,7 @@ export default function (options: Options = {}): AstroIntegration {
           vite: {
             plugins: [...plugins, configEnvironmentPlugin()],
             ssr: {
-              noExternal: ["@hedystia/view"],
+              noExternal: ["@hedystia/view", "@hedystia/astro"],
             },
           },
         });
