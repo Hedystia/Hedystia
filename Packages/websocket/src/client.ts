@@ -124,6 +124,20 @@ export class WebSocketClient {
     return this.socket.readyState;
   }
 
+  /** Bytes queued by the native socket, for application backpressure decisions. */
+  get bufferedAmount(): number {
+    return this.socket.bufferedAmount;
+  }
+
+  /** Choose Blob (default) or ArrayBuffer for incoming binary messages. */
+  get binaryType(): BinaryType {
+    return this.socket.binaryType;
+  }
+
+  set binaryType(value: BinaryType) {
+    this.socket.binaryType = value;
+  }
+
   /**
    * Send a payload to the server.
    *
