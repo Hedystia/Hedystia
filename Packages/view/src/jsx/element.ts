@@ -5,10 +5,17 @@
  * Supports both intrinsic elements (strings) and functional components.
  */
 
+import { SVG_ATTR_MAP, SVG_ELEMENTS, SVG_NS } from "../dom/svg";
+
+export { SVG_ATTR_MAP, SVG_ELEMENTS, SVG_NS } from "../dom/svg";
+
 import type { JSX } from "../jsx.d";
-import { flushPending } from "../render/flow";
+import { flushPending, resolveNodes } from "../render/flow";
+import { onHydrate, stageNode } from "../render/hydration";
 import { tick } from "../scheduler";
-import { adopt, Owner, runComputation, val } from "../signal";
+import { isRawHTML } from "../server/trusted";
+import { adopt, Owner, onCleanup, runComputation, val } from "../signal";
+import { createStaticNode } from "../static/node";
 import type { Accessor, Computation } from "../types";
 
 /**
@@ -19,170 +26,12 @@ export type FunctionComponent<P = {}> = (props: P & { children?: JSX.Element }) 
 /**
  * Element type - can be a string (intrinsic) or a function component
  */
-export type ElementType<P = {}> = string | FunctionComponent<P>;
+export type ElementType<P = {}> = string | ((props: P) => JSX.Element);
 
 /**
  * Check if running in browser environment
  */
 const isBrowser = typeof document !== "undefined";
-
-/**
- * SVG namespace URI
- */
-export const SVG_NS = "http://www.w3.org/2000/svg";
-
-/**
- * Set of SVG element tag names that require createElementNS
- */
-export const SVG_ELEMENTS = new Set([
-  "svg",
-  "animate",
-  "animateMotion",
-  "animateTransform",
-  "circle",
-  "clipPath",
-  "defs",
-  "desc",
-  "ellipse",
-  "feBlend",
-  "feColorMatrix",
-  "feComponentTransfer",
-  "feComposite",
-  "feConvolveMatrix",
-  "feDiffuseLighting",
-  "feDisplacementMap",
-  "feDistantLight",
-  "feDropShadow",
-  "feFlood",
-  "feFuncA",
-  "feFuncB",
-  "feFuncG",
-  "feFuncR",
-  "feGaussianBlur",
-  "feImage",
-  "feMerge",
-  "feMergeNode",
-  "feMorphology",
-  "feOffset",
-  "fePointLight",
-  "feSpecularLighting",
-  "feSpotLight",
-  "feTile",
-  "feTurbulence",
-  "filter",
-  "foreignObject",
-  "g",
-  "image",
-  "line",
-  "linearGradient",
-  "marker",
-  "mask",
-  "metadata",
-  "mpath",
-  "path",
-  "pattern",
-  "polygon",
-  "polyline",
-  "radialGradient",
-  "rect",
-  "stop",
-  "switch",
-  "symbol",
-  "text",
-  "textPath",
-  "title",
-  "tspan",
-  "use",
-  "view",
-]);
-
-/**
- * SVG attributes that use camelCase in JSX but need kebab-case in the DOM
- */
-export const SVG_ATTR_MAP: Record<string, string> = {
-  accentHeight: "accent-height",
-  alignmentBaseline: "alignment-baseline",
-  arabicForm: "arabic-form",
-  baselineShift: "baseline-shift",
-  capHeight: "cap-height",
-  clipPath: "clip-path",
-  clipRule: "clip-rule",
-  colorInterpolation: "color-interpolation",
-  colorInterpolationFilters: "color-interpolation-filters",
-  colorProfile: "color-profile",
-  colorRendering: "color-rendering",
-  dominantBaseline: "dominant-baseline",
-  enableBackground: "enable-background",
-  fillOpacity: "fill-opacity",
-  fillRule: "fill-rule",
-  floodColor: "flood-color",
-  floodOpacity: "flood-opacity",
-  fontFamily: "font-family",
-  fontSize: "font-size",
-  fontSizeAdjust: "font-size-adjust",
-  fontStretch: "font-stretch",
-  fontStyle: "font-style",
-  fontVariant: "font-variant",
-  fontWeight: "font-weight",
-  glyphName: "glyph-name",
-  glyphOrientationHorizontal: "glyph-orientation-horizontal",
-  glyphOrientationVertical: "glyph-orientation-vertical",
-  horizAdvX: "horiz-adv-x",
-  horizOriginX: "horiz-origin-x",
-  imageRendering: "image-rendering",
-  letterSpacing: "letter-spacing",
-  lightingColor: "lighting-color",
-  markerEnd: "marker-end",
-  markerMid: "marker-mid",
-  markerStart: "marker-start",
-  overlinePosition: "overline-position",
-  overlineThickness: "overline-thickness",
-  paintOrder: "paint-order",
-  panose1: "panose-1",
-  pointerEvents: "pointer-events",
-  shapeRendering: "shape-rendering",
-  stopColor: "stop-color",
-  stopOpacity: "stop-opacity",
-  strikethroughPosition: "strikethrough-position",
-  strikethroughThickness: "strikethrough-thickness",
-  strokeDasharray: "stroke-dasharray",
-  strokeDashoffset: "stroke-dashoffset",
-  strokeLinecap: "stroke-linecap",
-  strokeLinejoin: "stroke-linejoin",
-  strokeMiterlimit: "stroke-miterlimit",
-  strokeOpacity: "stroke-opacity",
-  strokeWidth: "stroke-width",
-  textAnchor: "text-anchor",
-  textDecoration: "text-decoration",
-  textRendering: "text-rendering",
-  underlinePosition: "underline-position",
-  underlineThickness: "underline-thickness",
-  unicodeBidi: "unicode-bidi",
-  unicodeRange: "unicode-range",
-  unitsPerEm: "units-per-em",
-  vAlphabetic: "v-alphabetic",
-  vHanging: "v-hanging",
-  vIdeographic: "v-ideographic",
-  vMathematical: "v-mathematical",
-  vectorEffect: "vector-effect",
-  vertAdvY: "vert-adv-y",
-  vertOriginX: "vert-origin-x",
-  vertOriginY: "vert-origin-y",
-  wordSpacing: "word-spacing",
-  writingMode: "writing-mode",
-  xHeight: "x-height",
-  xlinkActuate: "xlink:actuate",
-  xlinkArcrole: "xlink:arcrole",
-  xlinkHref: "xlink:href",
-  xlinkRole: "xlink:role",
-  xlinkShow: "xlink:show",
-  xlinkTitle: "xlink:title",
-  xlinkType: "xlink:type",
-  xmlBase: "xml:base",
-  xmlLang: "xml:lang",
-  xmlSpace: "xml:space",
-  xmlnsXlink: "xmlns:xlink",
-};
 
 /**
  * Create a real DOM element from JSX props
@@ -194,17 +43,17 @@ export const SVG_ATTR_MAP: Record<string, string> = {
  * const MyComponent = (props: { text: string }) => <div>{props.text}</div>;
  * const component = jsx(MyComponent, { text: "Hello" });
  */
-export function jsx<P>(type: ElementType<P>, props: P & { children?: JSX.Element }): JSX.Element {
-  const { children, ...rest } = props || {};
+export function jsx<P>(type: ElementType<P>, props: P): JSX.Element {
+  const { children, ...rest } = (props || {}) as Record<string, any>;
 
   // Handle function components
   if (typeof type === "function") {
-    return type({ children, ...rest } as P & { children?: JSX.Element });
+    return type(props);
   }
 
   // SSR mode: return serializable element representation
   if (!isBrowser) {
-    return { type, props: { children, ...rest }, __isSSR: true } as unknown as JSX.Element;
+    return createStaticNode(type, { children, ...rest }) as unknown as JSX.Element;
   }
 
   // Handle intrinsic elements (strings)
@@ -238,17 +87,20 @@ export function jsx<P>(type: ElementType<P>, props: P & { children?: JSX.Element
  */
 export function jsxs<P>(
   type: ElementType<P>,
-  props: P & { children?: JSX.Element },
+  props: P,
 ): JSX.Element | (HTMLElement | SVGElement | Text | Comment)[] {
-  const { children, ...rest } = props || {};
+  const { children, ...rest } = (props || {}) as Record<string, any>;
 
   // Handle function components
   if (typeof type === "function") {
-    return type({ children, ...rest } as P & { children?: JSX.Element });
+    return type(props);
   }
 
   // Handle Fragment
   if (type === "fragment" || type === "Fragment") {
+    if (!isBrowser) {
+      return children ?? null;
+    }
     if (Array.isArray(children)) {
       return flattenChildren(children);
     }
@@ -257,7 +109,7 @@ export function jsxs<P>(
 
   // SSR mode
   if (!isBrowser) {
-    return { type, props: { children, ...rest }, __isSSR: true } as unknown as JSX.Element;
+    return createStaticNode(type, { children, ...rest }) as unknown as JSX.Element;
   }
 
   // Handle intrinsic elements (strings)
@@ -286,6 +138,9 @@ export function Fragment(props: {
   children?: JSX.Children;
 }): JSX.Element | (HTMLElement | SVGElement | Text | Comment)[] {
   const { children } = props;
+  if (!isBrowser) {
+    return children as JSX.Element;
+  }
   if (children == null) {
     return null;
   }
@@ -331,12 +186,24 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
   if (value === undefined || value === null) {
     return;
   }
+  onHydrate((resolve) => {
+    element = resolve(element);
+  });
 
   const attrName = isSvg ? SVG_ATTR_MAP[key] || key : key === "htmlFor" ? "for" : key;
 
   if (key.startsWith("on") && typeof value === "function") {
     const eventName = key.slice(2).toLowerCase();
     element.addEventListener(eventName, value);
+    let original: Element | undefined = element;
+    onHydrate(() => {
+      if (original && element !== original) {
+        original.removeEventListener(eventName, value);
+        element.addEventListener(eventName, value);
+      }
+      original = undefined;
+    });
+    onCleanup(() => element.removeEventListener(eventName, value));
   } else if (key === "style") {
     const el = element as HTMLElement | SVGElement;
     if (typeof value === "string") {
@@ -380,17 +247,24 @@ function applyProp(element: Element, key: string, value: any, isSvg = false): vo
       element.setAttribute("class", normalize(value));
     }
   } else if (key === "innerHTML" || key === "innerText" || key === "textContent") {
-    const el = element as HTMLElement;
     if (typeof value === "function") {
       effect(() => {
         const val = value();
-        el[key] = val == null ? "" : String(val);
+        (element as HTMLElement)[key] = val == null ? "" : String(val);
       });
     } else {
-      el[key] = String(value);
+      (element as HTMLElement)[key] = String(value);
     }
   } else if (key === "ref" && typeof value === "function") {
-    tick(() => value(element));
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    tick(() => {
+      if (!cancelled) {
+        value(element);
+      }
+    });
   } else if ((key === "value" || key === "checked") && !isSvg && key in element) {
     const setProp = (v: any) => {
       if (key === "checked") {
@@ -456,6 +330,9 @@ function applyReactiveStyle(
   element: HTMLElement | SVGElement,
   accessor: Accessor<Record<string, any>>,
 ): void {
+  onHydrate((resolve) => {
+    element = resolve(element);
+  });
   let applied: string[] = [];
   effect(() => {
     const style = accessor();
@@ -485,6 +362,9 @@ function applyReactiveStyle(
 
 /** @internal */
 function applyReactiveProp(element: Element, key: string, accessor: Accessor<any>): void {
+  onHydrate((resolve) => {
+    element = resolve(element);
+  });
   effect(() => {
     const value = accessor();
     if (value === undefined || value === null || value === false) {
@@ -513,7 +393,11 @@ function appendSingleChild(element: Element | DocumentFragment, child: JSX.Child
   if (child === null || child === undefined || child === false) {
     return;
   }
-  if (Array.isArray(child)) {
+  if (isRawHTML(child)) {
+    const template = document.createElement("template");
+    template.innerHTML = child.html;
+    element.appendChild(template.content);
+  } else if (Array.isArray(child)) {
     for (let i = 0; i < child.length; i++) {
       appendSingleChild(element, child[i]);
     }
@@ -528,7 +412,7 @@ function appendSingleChild(element: Element | DocumentFragment, child: JSX.Child
     child instanceof DocumentFragment ||
     (typeof SVGElement !== "undefined" && child instanceof SVGElement)
   ) {
-    element.appendChild(child);
+    element.appendChild(stageNode(child));
     if (child instanceof Comment || child instanceof DocumentFragment) {
       flushPending([child]);
     }
@@ -540,60 +424,50 @@ function applyReactiveChild(
   element: Element | DocumentFragment,
   accessor: () => JSX.Child | JSX.Child[],
 ): void {
-  const marker = document.createComment("");
+  let marker = document.createComment("");
   element.appendChild(marker);
   let currentNodes: Node[] = [];
+  onHydrate((resolve) => {
+    marker = resolve(marker);
+    currentNodes = currentNodes.map(resolve);
+  });
 
   effect(() => {
     const value = accessor();
 
-    // Remove old nodes
-    for (let i = 0; i < currentNodes.length; i++) {
-      const node = currentNodes[i]!;
-      if (node.parentNode) {
-        node.parentNode.removeChild(node);
-      }
-    }
-    currentNodes = [];
-
-    const insert = (node: Node) => {
-      marker.parentNode!.insertBefore(node, marker);
-      currentNodes.push(node);
-    };
-
-    if (value === null || value === undefined || value === false) {
-      // nothing to insert
-    } else if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        const item = value[i];
-        if (
-          item instanceof HTMLElement ||
-          item instanceof Text ||
-          item instanceof Comment ||
-          item instanceof DocumentFragment ||
-          (typeof SVGElement !== "undefined" && item instanceof SVGElement)
-        ) {
-          insert(item);
-        } else if (typeof item === "string" || typeof item === "number") {
-          insert(document.createTextNode(String(item)));
-        } else if (Array.isArray(item)) {
-          const flat = flattenChildren(item);
-          for (let j = 0; j < flat.length; j++) {
-            insert(flat[j]!);
-          }
-        }
-      }
-    } else if (typeof value === "string" || typeof value === "number") {
-      insert(document.createTextNode(String(value)));
-    } else if (
-      value instanceof HTMLElement ||
-      value instanceof Text ||
-      value instanceof Comment ||
-      value instanceof DocumentFragment ||
-      (typeof SVGElement !== "undefined" && value instanceof SVGElement)
+    if (
+      (typeof value === "string" || typeof value === "number") &&
+      currentNodes.length === 1 &&
+      currentNodes[0]!.nodeType === 3
     ) {
-      insert(value);
+      const text = String(value);
+      if (currentNodes[0]!.textContent !== text) {
+        currentNodes[0]!.textContent = text;
+      }
+      return;
     }
+    const next = resolveNodes(value);
+    if (
+      next.length === currentNodes.length &&
+      next.every((node, index) => node === currentNodes[index])
+    ) {
+      return;
+    }
+    for (const node of currentNodes) {
+      if (!next.includes(node)) {
+        node.parentNode?.removeChild(node);
+      }
+    }
+    let anchor: Node = marker;
+    for (let index = next.length - 1; index >= 0; index--) {
+      const node = next[index]!;
+      if (node.parentNode !== marker.parentNode || node.nextSibling !== anchor) {
+        marker.parentNode!.insertBefore(node, anchor);
+      }
+      anchor = node;
+    }
+    currentNodes = next;
+    flushPending(next);
   });
 }
 
@@ -602,7 +476,13 @@ function flattenChildren(children: JSX.Child[]): Array<HTMLElement | SVGElement 
   const result: Array<HTMLElement | SVGElement | Text | Comment> = [];
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
-    if (Array.isArray(child)) {
+    if (typeof child === "function") {
+      const fragment = document.createDocumentFragment();
+      applyReactiveChild(fragment, child);
+      result.push(
+        ...(Array.from(fragment.childNodes) as Array<HTMLElement | SVGElement | Text | Comment>),
+      );
+    } else if (Array.isArray(child)) {
       result.push(...flattenChildren(child));
     } else if (child !== null && child !== undefined && child !== false) {
       if (
@@ -611,7 +491,7 @@ function flattenChildren(children: JSX.Child[]): Array<HTMLElement | SVGElement 
         child instanceof Comment ||
         (typeof SVGElement !== "undefined" && child instanceof SVGElement)
       ) {
-        result.push(child);
+        result.push(stageNode(child));
       } else if (typeof child === "string" || typeof child === "number") {
         result.push(document.createTextNode(String(child)));
       }
