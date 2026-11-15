@@ -1,6 +1,22 @@
 # @hedystia/view
 
+## Reactive data without stale-response races
+
+`load(key, (value, signal) => fetch(url, { signal }))` cancels superseded work and ignores late results even if the fetcher ignores cancellation. Resources created inside an owner also cancel when that owner is disposed. Existing one-argument fetchers remain supported.
+
+```sh
+npm install @hedystia/view
+```
+
 Reactive UI engine — fine-grained signals, no Virtual DOM, real DOM nodes.
+
+## Static HTML and interactive islands
+
+Use `renderToString` from `@hedystia/view/server` for server rendering and `buildStatic` from `@hedystia/view/build` to generate a static site. Pages without declared `Island` boundaries emit HTML with no browser scripts. Interactive pages load a bootstrap and lazy island modules while their surrounding shell stays static. Native cross-document View Transitions can be enabled without JavaScript.
+
+The Vite plugin selects the static JSX runtime for server builds and the reactive DOM runtime for browser builds. Astro controls activation through its `client:*` directives. Island activation hydrates compatible server DOM in place, preserving native elements, focus and live form edits. Signals then update those elements directly, without a virtual DOM.
+
+See [static builds and islands](https://docs.hedystia.com/view/render/static) for a complete example, activation strategies and serialization requirements, and [View Router](https://docs.hedystia.com/client/router) for typed SPA navigation.
 
 ## Installation
 
@@ -337,7 +353,7 @@ function UserCard() {
 | **Context** | `ctx`, `use` |
 | **Fetch** | `load`, `action` |
 | **Flow** | `Show`, `For`, `Index`, `Switch`, `Match`, `Portal`, `Suspense`, `ErrorBoundary` |
-| **Render** | `mount`, `renderToString` |
+| **Render** | `hydrate`, `mount`, `renderToString` |
 | **Text** | `prepare`, `layout`, `reactiveLayout` |
 | **Style** | `style`, `merge`, `toCssString` |
 | **Scheduler** | `tick`, `nextFrame`, `forceFlush` |
