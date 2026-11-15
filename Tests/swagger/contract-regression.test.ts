@@ -3,6 +3,26 @@ import Framework, { h } from "hedystia";
 import { describe, expect, it } from "vitest";
 
 describe("OpenAPI contract generation", () => {
+  it("documents custom request headers and respects OpenAPI reserved names", async () => {
+    const app = new Framework().get("/private", () => "ok", {
+      headers: h.object({
+        "x-api-key": h.string(),
+        "x-trace-id": h.string().optional(),
+        Authorization: h.string(),
+        Accept: h.string(),
+        "Content-Type": h.string(),
+      }),
+    });
+    const registered = swagger();
+    registered.plugin(app);
+    const parameters = (registered.swagger.getSpec() as any).paths["/private"].get.parameters;
+    expect(parameters).toEqual([
+      expect.objectContaining({ name: "x-api-key", in: "header", required: true }),
+      expect.objectContaining({ name: "x-trace-id", in: "header", required: false }),
+    ]);
+    expect(await registered.swagger.validate()).toBe(true);
+  });
+
   it("preserves metadata and separates path, query, body, and response schemas", async () => {
     const app = new Framework()
       .get("/accounts/:id", () => ({ id: "a-1", active: true }), {
