@@ -281,15 +281,47 @@ importers:
 
   Packages/integrations/view/astro:
     dependencies:
-      '@hedystia/view':
-        specifier: '>= 2.0.0'
-        version: 2.3.9(vite@7.3.2(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.0))
       astro:
         specifier: '>= 6.0.0'
         version: 6.3.6(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.33.0)(rollup@4.60.4)(yaml@2.9.0)
       vite:
         specifier: '>= 7.3.2'
         version: 7.3.2(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.0)
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.3.14
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
+      '@hedystia/view':
+        specifier: workspace:*
+        version: link:../../../view
+
+  Packages/query:
+    dependencies:
+      '@hedystia/view':
+        specifier: workspace:*
+        version: link:../view
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.3.14
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
+
+  Packages/router:
+    dependencies:
+      '@hedystia/query':
+        specifier: workspace:*
+        version: link:../query
+      '@hedystia/view':
+        specifier: workspace:*
+        version: link:../view
+      vite:
+        specifier: '>= 8.0.0'
+        version: 8.3.2(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0)
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
@@ -389,6 +421,9 @@ importers:
 
   Tests:
     dependencies:
+      '@hedystia/query':
+        specifier: workspace:*
+        version: link:../Packages/query
       '@aws-sdk/client-s3':
         specifier: ^3.1014.0
         version: 3.1051.0
@@ -479,6 +514,9 @@ importers:
       typeorm:
         specifier: 0.3.29
         version: 0.3.29(better-sqlite3@12.10.0)(mysql2@3.22.3(@types/node@25.9.1))(pg@8.21.0)(sql.js@1.14.1)(sqlite3@6.0.1)
+      '@hedystia/router':
+        specifier: workspace:*
+        version: link:../Packages/router
     devDependencies:
       '@types/bun':
         specifier: latest
@@ -495,6 +533,9 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@types/node@25.9.1)(happy-dom@20.14.5)(vite@8.3.2(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+      astro:
+        specifier: 6.3.6
+        version: 6.3.6(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.33.0)(rollup@4.60.4)(yaml@2.9.0)
 
 packages:
 
