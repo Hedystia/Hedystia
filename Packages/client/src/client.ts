@@ -19,6 +19,7 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
   clientOptions?: {
     credentials?: "omit" | "same-origin" | "include";
     headers?: Record<string, string>;
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     sse?: boolean;
     debugLevel?: "none" | "debug" | "warn" | "log" | "error";
   },
@@ -76,7 +77,7 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
           const url = new URL(fullPath, baseUrl);
 
           const options = args[0] || {};
-          const { body, query, headers, responseFormat = "json", credentials } = options;
+          const { body, query, headers, responseFormat = "json", credentials, signal } = options;
 
           if (query && typeof query === "object") {
             url.search = new URLSearchParams(query as any).toString();
@@ -84,6 +85,7 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
 
           const init: RequestInit = {
             method,
+            signal,
             credentials: credentials ?? clientOptions?.credentials,
             headers: {
               ...(body !== undefined && !(body instanceof FormData)
@@ -103,7 +105,7 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
 
           return (async () => {
             try {
-              const res = await fetch(url.toString(), init);
+              const res = await (clientOptions?.fetch ?? globalThis.fetch)(url.toString(), init);
               const status = res.status;
               const ok = res.ok;
 
@@ -124,7 +126,9 @@ export function createClient<T extends Hedystia<any> | RouteDefinition[]>(
           })();
         }
         const value = args[0];
-        const newSegments = segments.slice(0, segments.length - 1).concat(String(value));
+        const newSegments = segments
+          .slice(0, segments.length - 1)
+          .concat(encodeURIComponent(String(value)));
         return createProxy(newSegments);
       },
     });
