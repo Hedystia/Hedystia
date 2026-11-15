@@ -34,7 +34,7 @@ describe("astro integration", () => {
           vite: expect.objectContaining({
             plugins: expect.any(Array),
             ssr: {
-              noExternal: ["@hedystia/view"],
+              noExternal: ["@hedystia/view", "@hedystia/astro"],
             },
           }),
         }),
