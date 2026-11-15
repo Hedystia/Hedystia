@@ -13,6 +13,9 @@ export class MemoryStore {
   private maxEntries: number;
 
   constructor(maxEntries = 10_000) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+      throw new RangeError("maxEntries must be a positive integer");
+    }
     this.maxEntries = maxEntries;
   }
 
@@ -26,7 +29,7 @@ export class MemoryStore {
     if (!entry) {
       return undefined;
     }
-    if (Date.now() > entry.expiresAt) {
+    if (Date.now() >= entry.expiresAt) {
       this.store.delete(key);
       return undefined;
     }
@@ -42,7 +45,11 @@ export class MemoryStore {
    * @param {number} ttl - Time to live in milliseconds
    */
   set(key: string, value: unknown, ttl: number): void {
-    if (this.store.size >= this.maxEntries) {
+    if (!Number.isFinite(ttl) || ttl <= 0) {
+      this.store.delete(key);
+      return;
+    }
+    if (!this.store.has(key) && this.store.size >= this.maxEntries) {
       this.evict();
     }
     this.store.set(key, {
@@ -63,7 +70,7 @@ export class MemoryStore {
     if (!entry) {
       return false;
     }
-    if (Date.now() > entry.expiresAt) {
+    if (Date.now() >= entry.expiresAt) {
       this.store.delete(key);
       return false;
     }
@@ -133,7 +140,7 @@ export class MemoryStore {
     let oldestKey: string | null = null;
     let oldestAccess = Number.POSITIVE_INFINITY;
     for (const [key, entry] of this.store) {
-      if (Date.now() > entry.expiresAt) {
+      if (Date.now() >= entry.expiresAt) {
         this.store.delete(key);
         return;
       }
@@ -142,7 +149,7 @@ export class MemoryStore {
         oldestKey = key;
       }
     }
-    if (oldestKey) {
+    if (oldestKey !== null) {
       this.store.delete(oldestKey);
     }
   }
