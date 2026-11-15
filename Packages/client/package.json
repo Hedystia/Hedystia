@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/client",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
+  "description": "End-to-end typed HTTP client with injectable fetch, request cancellation, SSE and WebSockets.",
   "homepage": "https://docs.hedystia.com",
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -14,14 +14,13 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "framework",
     "typescript",
-    "api",
+    "http-client",
     "type-safe",
-    "bun",
-    "server",
-    "backend",
-    "web"
+    "fetch",
+    "abortcontroller",
+    "sse",
+    "websocket"
   ],
   "license": "MIT",
   "scripts": {
@@ -33,9 +32,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
