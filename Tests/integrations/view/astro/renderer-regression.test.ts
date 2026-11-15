@@ -9,12 +9,43 @@ function result() {
 }
 
 describe("Astro renderer integration contracts", () => {
+  it("accepts components that intentionally render nothing", async () => {
+    expect(await renderer.check!.call({ result: result() }, () => null, {}, {})).toBe(true);
+    expect(await renderer.check!.call({ result: result() }, () => "", {}, {})).toBe(true);
+  });
+
+  it("escapes a slot name used inside an HTML attribute", async () => {
+    const name = 'hero" data-injected="yes';
+    const rendered = await renderer.renderToStaticMarkup!.call(
+      { result: result() },
+      (props: any) =>
+        jsx("section", {
+          children:
+            props[
+              name.replace(/[-_]([a-z])/g, (_match: string, letter: string) => letter.toUpperCase())
+            ],
+        }),
+      {},
+      { [name]: "content" },
+    );
+    expect(rendered.html).toContain("&quot;");
+    const container = document.createElement("div");
+    container.innerHTML = rendered.html;
+    expect(container.querySelector("[data-injected]")).toBeNull();
+    expect(container.querySelector("astro-slot")?.getAttribute("name")).toBe(
+      name.replace(/[-_]([a-z])/g, (_, letter) => letter.toUpperCase()),
+    );
+  });
+
   it("accepts view components and rejects incompatible component shapes", async () => {
     const Component = ({ children, title }: any) => jsx("section", { title, children });
     expect(await renderer.check!.call({ result: result() }, Component, { title: "ok" }, {})).toBe(
       true,
     );
     expect(await renderer.check!.call({ result: result() }, "not-a-component", {}, {})).toBe(false);
+    expect(
+      await renderer.check!.call({ result: result() }, () => ({ unsupported: true }), {}, {}),
+    ).toBe(false);
     const incompatible = Object.assign(() => jsx("div", { children: "no" }), {
       toString: () => "function component($$payload) {}",
     });
