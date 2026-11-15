@@ -3,6 +3,41 @@ import Framework, { h } from "hedystia";
 import { describe, expect, it } from "vitest";
 
 describe("OpenAPI contract generation", () => {
+  it("retains global request schemas when individual routes omit them", async () => {
+    const app = new Framework({ headers: h.object({ "x-token": h.string() }) }).get(
+      "/private",
+      () => "ok",
+    );
+    const registered = swagger();
+    registered.plugin(app);
+    const operation = (registered.swagger.getSpec() as any).paths["/private"].get;
+    expect(operation.parameters).toEqual([
+      { name: "x-token", in: "header", required: true, schema: { type: "string" } },
+    ]);
+    expect(await registered.swagger.validate()).toBe(true);
+  });
+
+  it("omits absent sections and infers required path parameters without a params schema", async () => {
+    const app = new Framework()
+      .get("/plain", () => "ok")
+      .get("/users/:id", ({ params }) => params)
+      .post("/explicit", ({ body }) => body, { body: h.any(), response: h.any() });
+    const registered = swagger();
+    registered.plugin(app);
+    const spec = registered.swagger.getSpec() as any;
+    expect(spec.paths["/plain"].get).not.toHaveProperty("parameters");
+    expect(spec.paths["/plain"].get).not.toHaveProperty("requestBody");
+    expect(spec.paths["/plain"].get.responses["200"]).not.toHaveProperty("content");
+    expect(spec.paths["/users/{id}"].get.parameters).toEqual([
+      { name: "id", in: "path", required: true, schema: { type: "string" } },
+    ]);
+    expect(spec.paths["/explicit"].post.requestBody.content["application/json"].schema).toEqual({});
+    expect(
+      spec.paths["/explicit"].post.responses["200"].content["application/json"].schema,
+    ).toEqual({});
+    expect(await registered.swagger.validate()).toBe(true);
+  });
+
   it("documents custom request headers and respects OpenAPI reserved names", async () => {
     const app = new Framework().get("/private", () => "ok", {
       headers: h.object({
