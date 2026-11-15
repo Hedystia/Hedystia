@@ -46,13 +46,18 @@ export class HedystiaAdapter<Routes extends RouteDefinition[] = [], Macros exten
 
     return async (req: any, res: any) => {
       try {
-        const request = this.nodeToRequest(req, prefix);
+        const request = await this.nodeToRequest(req, prefix);
         const response = await this.app.fetch(request);
         await this.responseToNode(response, res);
       } catch (error) {
         console.error("Server error:", error);
-        res.statusCode = 500;
-        res.end(`Internal Server Error: ${(error as Error).message}`);
+        if (res.headersSent) {
+          res.destroy(error);
+        } else {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "text/plain");
+          res.end("Internal Server Error");
+        }
       }
     };
   }
@@ -138,49 +143,30 @@ export class HedystiaAdapter<Routes extends RouteDefinition[] = [], Macros exten
 
     return async (req: any, res: any) => {
       try {
-        const request = this.vercelToRequest(req, prefix);
+        const request = await this.vercelToRequest(req, prefix);
         const response = await this.app.fetch(request);
         await this.responseToNode(response, res);
       } catch (error) {
         console.error("Server error:", error);
-        res.statusCode = 500;
-        res.setHeader("Content-Type", "text/plain");
-        res.end(`Internal Server Error: ${(error as Error).message}`);
+        if (res.headersSent) {
+          res.destroy(error);
+        } else {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "text/plain");
+          res.end("Internal Server Error");
+        }
       }
     };
   }
 
-  private vercelToRequest(req: any, prefix: string): Request {
+  private vercelToRequest(req: any, prefix: string): Promise<Request> {
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const protocol = req.headers["x-forwarded-proto"] || "https";
-    const path = prefix + req.url;
-    const url = new URL(path, `${protocol}://${host}`);
-
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (typeof value === "string") {
-        headers.set(key, value);
-      } else if (Array.isArray(value)) {
-        for (const v of value) {
-          headers.append(key, v);
-        }
-      }
-    }
-
-    const body =
-      req.body && req.method !== "GET" && req.method !== "HEAD"
-        ? JSON.stringify(req.body)
-        : undefined;
-
-    return new Request(url.toString(), {
-      method: req.method,
-      headers,
-      body,
-    });
+    return this.nodeToRequest(req, prefix, `${protocol}://${host}`);
   }
 
-  private nodeToRequest(req: any, prefix: string): Request {
-    const url = new URL(prefix + req.url, `http://${req.headers.host || "localhost"}`);
+  private async nodeToRequest(req: any, prefix: string, origin?: string): Promise<Request> {
+    const url = new URL(prefix + req.url, origin ?? `http://${req.headers.host || "localhost"}`);
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {
       if (Array.isArray(value)) {
@@ -192,25 +178,45 @@ export class HedystiaAdapter<Routes extends RouteDefinition[] = [], Macros exten
       }
     }
 
-    let body: any = null;
-    if (req.body && req.method !== "GET" && req.method !== "HEAD") {
-      body = JSON.stringify(req.body);
+    let body: BodyInit | null = null;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      if (req.body !== undefined) {
+        body =
+          typeof req.body === "string" || req.body instanceof Uint8Array
+            ? req.body
+            : JSON.stringify(req.body);
+      } else if (typeof req[Symbol.asyncIterator] === "function") {
+        const { Readable } = await import("node:stream");
+        body = Readable.toWeb(req) as ReadableStream;
+      }
     }
 
     return new Request(url.toString(), {
       method: req.method,
       headers,
       body,
+      ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
     });
   }
 
   private async responseToNode(response: Response, res: any) {
     res.statusCode = response.status;
     for (const [key, value] of response.headers.entries()) {
-      res.setHeader(key, value);
+      if (key !== "set-cookie") {
+        res.setHeader(key, value);
+      }
     }
-    const body = await response.arrayBuffer();
-    res.end(Buffer.from(body));
+    const cookies = response.headers.getSetCookie();
+    if (cookies.length) {
+      res.setHeader("set-cookie", cookies);
+    }
+    if (response.body && typeof res.write === "function") {
+      const { Readable } = await import("node:stream");
+      const { pipeline } = await import("node:stream/promises");
+      await pipeline(Readable.fromWeb(response.body as any), res);
+    } else {
+      res.end(Buffer.from(await response.arrayBuffer()));
+    }
   }
 
   private lambdaToRequest(event: any, prefix: string): Request {
