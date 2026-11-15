@@ -1,5 +1,13 @@
 # @hedystia/ws
 
+## Native sockets with binary and queue controls
+
+Share topic-based server handlers across runtimes. On `WebSocketClient`, set `binaryType = "arraybuffer"` to receive binary frames as ArrayBuffers and inspect `bufferedAmount` before sending more data. These properties forward native state; the wrapper does not impose an automatic queue policy.
+
+```sh
+npm install @hedystia/ws
+```
+
 Universal WebSocket primitives for Hedystia on Bun, Node.js, and Deno.
 
 ## Install
