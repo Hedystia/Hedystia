@@ -412,13 +412,14 @@ export class Hedystia<
     const routes = this.routes.map((route) => ({
       method: route.method,
       path: route.path,
-      params: route.schema.params,
-      query: route.schema.query,
-      body: route.schema.body,
+      params: route.schema.params ?? this.globals.params,
+      query: route.schema.query ?? this.globals.query,
+      body: route.schema.body ?? (route.method === "GET" ? undefined : this.globals.body),
       response: route.schema.response,
-      headers: route.schema.headers,
+      headers: route.schema.headers ?? this.globals.headers,
       data: route.schema.data,
       error: route.schema.error,
+      message: route.schema.message,
     }));
 
     const subscriptionRoutes = Array.from(this.subscriptionHandlers.entries()).map(
@@ -432,6 +433,7 @@ export class Hedystia<
         headers: schema.headers,
         data: schema.data,
         error: schema.error,
+        message: schema.message,
       }),
     );
 
@@ -483,6 +485,7 @@ export class Hedystia<
       !paramsSchema &&
       !querySchema &&
       !headersSchema &&
+      !this.defaultHeaders &&
       !bodySchema &&
       !errorSchema &&
       !globalParamsSchema &&
