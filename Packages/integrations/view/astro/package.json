@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/astro",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Use reactive Hedystia View components in Astro with SSR, client islands and navigation cleanup.",
   "homepage": "https://docs.hedystia.com",
   "private": false,

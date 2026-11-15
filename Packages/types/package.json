@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/types",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Generate portable TypeScript route declarations in memory or on disk for typed API consumers.",
   "homepage": "https://docs.hedystia.com/plugins/types",
   "dependencies": {

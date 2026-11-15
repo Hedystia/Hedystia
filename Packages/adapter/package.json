@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/adapter",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Deploy Hedystia across runtimes with native Node request streams, streaming responses and cookie fidelity.",
   "homepage": "https://docs.hedystia.com/plugins/adapter",
   "devDependencies": {

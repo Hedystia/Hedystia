@@ -43,7 +43,13 @@ jobs:
           for dir in Packages/*/ Packages/integrations/*/*/; do
             if [ -f "$dir/package.json" ]; then
               cd "$ROOT/$dir"
-              pnpm publish --no-git-checks --provenance --access public
+              NAME=$(node -p "require('./package.json').name")
+              VERSION=$(node -p "require('./package.json').version")
+              if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+                echo "::notice::Skipping $NAME@$VERSION (already published on npm)"
+              else
+                pnpm publish --no-git-checks --provenance --access public
+              fi
               cd "$ROOT"
             fi
           done

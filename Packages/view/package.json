@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/view",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Fine-grained reactive JSX UI with signals, SSR, lifecycle cleanup and race-safe async resources.",
   "homepage": "https://docs.hedystia.com",
   "private": false,

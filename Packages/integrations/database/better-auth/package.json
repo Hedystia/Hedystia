@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/better-auth",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Better Auth adapter for Hedystia DB with schema generation, transactions and validated pagination.",
   "homepage": "https://docs.hedystia.com",
   "private": false,

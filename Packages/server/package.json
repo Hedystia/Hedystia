@@ -1,6 +1,6 @@
 {
   "name": "hedystia",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Schema-first TypeScript HTTP server with typed routes, SSE, WebSockets and embedded route tests.",
   "homepage": "https://docs.hedystia.com",
   "dependencies": {

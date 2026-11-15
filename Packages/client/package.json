@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/client",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "End-to-end typed HTTP client with injectable fetch, request cancellation, SSE and WebSockets.",
   "homepage": "https://docs.hedystia.com",
   "devDependencies": {

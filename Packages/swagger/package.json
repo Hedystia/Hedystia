@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/swagger",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Generate OpenAPI documentation and interactive API docs from Hedystia route schemas and custom headers.",
   "homepage": "https://docs.hedystia.com/plugins/swagger",
   "devDependencies": {

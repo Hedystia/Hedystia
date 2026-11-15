@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/query",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Reactive query caching, shared requests and mutation invalidation built on Hedystia View.",
   "homepage": "https://docs.hedystia.com/client/query",
   "devDependencies": {

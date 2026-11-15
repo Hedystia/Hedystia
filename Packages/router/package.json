@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/router",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Typed View routing with nested layouts, generated lazy routes, shared loaders and native navigation.",
   "homepage": "https://docs.hedystia.com/client/router",
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/validations",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Composable TypeScript validation with Standard Schema interoperability, async checks and inferred object helpers.",
   "homepage": "https://docs.hedystia.com/validations/start",
   "devDependencies": {

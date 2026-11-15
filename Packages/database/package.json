@@ -1,6 +1,6 @@
 {
   "name": "@hedystia/db",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "Schema-first TypeScript ORM with SQL, file and S3 drivers, migrations and bounded query caching.",
   "homepage": "https://docs.hedystia.com",
   "devDependencies": {
