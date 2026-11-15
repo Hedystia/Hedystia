@@ -1,7 +1,7 @@
 {
   "name": "@hedystia/adapter",
   "version": "2.4.7",
-  "description": "Next-gen TypeScript framework for building type-safe APIs at lightspeed",
+  "description": "Deploy Hedystia across runtimes with native Node request streams, streaming responses and cookie fidelity.",
   "homepage": "https://docs.hedystia.com/plugins/adapter",
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -13,14 +13,13 @@
   "private": false,
   "keywords": [
     "hedystia",
-    "framework",
     "typescript",
-    "api",
-    "type-safe",
-    "bun",
-    "server",
-    "backend",
-    "web"
+    "adapter",
+    "nodejs",
+    "cloudflare-workers",
+    "aws-lambda",
+    "vercel",
+    "streaming"
   ],
   "license": "MIT",
   "scripts": {
@@ -32,9 +31,9 @@
     "url": "https://github.com/Hedystia/Hedystia"
   },
   "author": {
-    "name": "Zastinian",
-    "email": "contact@zastinian.com",
-    "url": "https://github.com/Zastinian"
+    "name": "Hedystia",
+    "email": "contact@hedystia.com",
+    "url": "https://github.com/Hedystia"
   },
   "type": "commonjs",
   "types": "./dist/index.d.cts",
