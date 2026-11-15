@@ -1,5 +1,13 @@
 # Hedystia server
 
+## Test the contract beside the route
+
+Validate HTTP routes and run their embedded tests with `app.runTests()` without opening a port. Test requests preserve falsy JSON bodies and encode each path parameter independently.
+
+```sh
+npm install hedystia
+```
+
 A runtime-agnostic TypeScript HTTP framework with validation, typed routes,
 subscriptions, and WebSocket support.
 
