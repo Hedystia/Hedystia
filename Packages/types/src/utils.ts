@@ -4,12 +4,16 @@ import {
   BooleanSchemaType,
   InstanceOfSchema,
   LiteralSchema,
+  NeverSchemaType,
   NullSchemaType,
   NumberSchemaType,
   ObjectSchemaType,
   OptionalSchema,
   StringSchemaType,
+  UndefinedSchemaType,
   UnionSchema,
+  UnknownSchemaType,
+  VoidSchemaType,
 } from "@hedystia/validations";
 
 export function schemaToTypeString(schema: any): string {
@@ -31,6 +35,18 @@ export function schemaToTypeString(schema: any): string {
   }
   if (schema instanceof AnySchemaType) {
     return "any";
+  }
+  if (schema instanceof UnknownSchemaType) {
+    return "unknown";
+  }
+  if (schema instanceof UndefinedSchemaType) {
+    return "undefined";
+  }
+  if (schema instanceof VoidSchemaType) {
+    return "void";
+  }
+  if (schema instanceof NeverSchemaType) {
+    return "never";
   }
 
   if (schema instanceof OptionalSchema) {
